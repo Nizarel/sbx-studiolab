@@ -6,6 +6,7 @@ from typing import Dict, BinaryIO, Optional, Union, List, Tuple
 from fastapi import UploadFile
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
+from azure.identity import DefaultAzureCredential
 from datetime import datetime
 
 from backend.core.config import settings
@@ -25,21 +26,33 @@ class AzureBlobStorageService:
         self.image_container = settings.AZURE_BLOB_IMAGE_CONTAINER
         self.video_container = settings.AZURE_BLOB_VIDEO_CONTAINER
 
-        # Create the BlobServiceClient using either connection string or account credentials
-        if settings.AZURE_STORAGE_CONNECTION_STRING:
+        # Determine authentication method
+        use_managed_identity = settings.USE_MANAGED_IDENTITY or not settings.AZURE_STORAGE_ACCOUNT_KEY
+        
+        # Create the BlobServiceClient using managed identity or keys
+        if settings.AZURE_STORAGE_CONNECTION_STRING and not use_managed_identity:
             # Create client using connection string (deprecated approach)
+            logger.info("Using connection string for Azure Storage authentication")
             self.blob_service_client = BlobServiceClient.from_connection_string(
                 settings.AZURE_STORAGE_CONNECTION_STRING)
         else:
-            # Create client using account name and key (preferred approach)
+            # Construct account URL
             account_url = settings.AZURE_BLOB_SERVICE_URL
-            # If AZURE_BLOB_SERVICE_URL is not provided, construct it from account name
             if not account_url and settings.AZURE_STORAGE_ACCOUNT_NAME:
                 account_url = f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/"
-
+            
+            if use_managed_identity:
+                # Use managed identity authentication (recommended for Azure deployments)
+                logger.info("Using Managed Identity for Azure Storage authentication")
+                credential = DefaultAzureCredential()
+            else:
+                # Use account key authentication
+                logger.info("Using account key for Azure Storage authentication")
+                credential = settings.AZURE_STORAGE_ACCOUNT_KEY
+            
             self.blob_service_client = BlobServiceClient(
                 account_url=account_url,
-                credential=settings.AZURE_STORAGE_ACCOUNT_KEY
+                credential=credential
             )
 
         # Ensure containers exist

@@ -268,6 +268,15 @@ module cosmosRoleAssignmentMod './modules/cosmosRoleAssignment.bicep' = {
   ]
 }
 
+// Storage role assignment - grant backend Container App access to blob storage
+module storageRoleAssignmentMod './modules/storageRoleAssignment.bicep' = {
+  name: 'storageRoleAssignmentMod'
+  params: {
+    storageAccountName: storageAccountName
+    containerAppPrincipalId: containerAppBackend.outputs.containerAppPrincipalId
+  }
+}
+
 // Outputs for azd
 output AZURE_LOCATION string = location
 output AZURE_CONTAINER_ENVIRONMENT_NAME string = containerAppEnvMod.outputs.containerAppEnvId
