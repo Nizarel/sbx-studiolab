@@ -93,7 +93,12 @@ def test_cosmos_health() -> bool:
         response = requests.get(f"{API_V1}/gallery/health", timeout=15)
         if response.status_code == 200:
             data = response.json()
-            cosmos_status = data.get('cosmos_db', {})
+            services = data.get('services', {}) if isinstance(data, dict) else {}
+            cosmos_status = services.get('cosmos_db', {})
+            if not cosmos_status:
+                print_error("Cosmos DB status not present in health response")
+                print_info(f"Response payload: {json.dumps(data)[:200]}")
+                return False
             if cosmos_status.get('status') == 'healthy':
                 print_success(f"Cosmos DB connection healthy")
                 print_info(f"Database: {cosmos_status.get('database')}")
@@ -136,28 +141,33 @@ def test_image_generation() -> Optional[Dict]:
         
         if response.status_code == 200:
             data = response.json()
-            
+
             # Debug: print the actual response structure
             print_info(f"Response keys: {list(data.keys())}")
-            
+
             if data.get('success') and data.get('images'):
                 image_count = len(data['images'])
                 print_success(f"Generated {image_count} image(s)")
-                
-                # Print token usage if available
+
                 if data.get('usage'):
                     usage = data['usage']
                     print_info(f"Tokens used: {usage.get('total_tokens', 'N/A')}")
-                
+
+                data['request_payload'] = payload
                 return data
             elif data.get('imgen_model_response'):
-                # Handle the actual response structure
                 print_info("Found imgen_model_response in response")
                 model_resp = data.get('imgen_model_response', {})
                 if isinstance(model_resp, dict) and model_resp.get('data'):
                     print_success(f"Generated {len(model_resp['data'])} image(s)")
-                    # Reformat to expected structure
                     data['images'] = model_resp.get('data', [])
+                    data['request_payload'] = payload
+
+                    if data.get('token_usage'):
+                        usage = data['token_usage']
+                        if isinstance(usage, dict):
+                            print_info(f"Tokens used: {usage.get('total_tokens', 'N/A')}")
+
                     return data
                 else:
                     print_error(f"Unexpected imgen_model_response structure: {type(model_resp)}")
@@ -180,7 +190,7 @@ def test_image_generation() -> Optional[Dict]:
         return None
 
 
-def test_image_save(generation_data: Dict) -> Optional[str]:
+def test_image_save(generation_data: Dict) -> Optional[Dict[str, str]]:
     """Test saving generated image to storage and Cosmos DB"""
     print_section("5. Image Save")
     
@@ -188,15 +198,27 @@ def test_image_save(generation_data: Dict) -> Optional[str]:
         print_error("No generation data to save")
         return None
     
-    image_data = generation_data['images'][0]
-    
+    request_payload = generation_data.get('request_payload', {})
+
+    generation_response = {
+        "success": generation_data.get('success', True),
+        "message": generation_data.get('message'),
+        "error": generation_data.get('error'),
+        "imgen_model_response": generation_data.get('imgen_model_response'),
+        "token_usage": generation_data.get('token_usage')
+    }
+
     save_payload = {
-        "images": [image_data],
+        "generation_response": generation_response,
+        "prompt": request_payload.get('prompt'),
+        "model": request_payload.get('model'),
+        "size": request_payload.get('size'),
+        "save_all": True,
         "folder_path": "e2e-test",
         "metadata": {
             "test_type": "end_to_end",
             "test_timestamp": str(int(time.time())),
-            "prompt": generation_data.get('prompt', '')
+            "prompt": request_payload.get('prompt')
         }
     }
     
@@ -217,11 +239,14 @@ def test_image_save(generation_data: Dict) -> Optional[str]:
             if data.get('success') and data.get('saved_images'):
                 saved = data['saved_images'][0]
                 print_success(f"Image saved successfully")
-                print_info(f"Asset ID: {saved.get('asset_id')}")
-                print_info(f"Blob name: {saved.get('blob_name')}")
+                blob_name = saved.get('blob_name')
+                asset_id = blob_name.split("/")[-1].split(".")[0] if blob_name else None
+                print_info(f"Blob name: {blob_name}")
+                if asset_id:
+                    print_info(f"Asset id: {asset_id}")
                 print_info(f"URL: {saved.get('url')[:80]}...")
                 
-                return saved.get('asset_id')
+                return {"blob_name": blob_name, "asset_id": asset_id}
             else:
                 print_error(f"Save succeeded but no saved images: {data.get('message')}")
                 return None
@@ -235,11 +260,22 @@ def test_image_save(generation_data: Dict) -> Optional[str]:
         return None
 
 
-def test_gallery_retrieval(asset_id: str) -> bool:
+def test_gallery_retrieval(asset_info: Dict[str, str]) -> bool:
     """Test retrieving saved image from gallery"""
     print_section("6. Gallery Retrieval")
     
-    print_info(f"Retrieving asset {asset_id} from gallery...")
+    blob_name = asset_info.get('blob_name')
+    asset_id = asset_info.get('asset_id')
+
+    if not blob_name:
+        print_error("Blob name missing, cannot query gallery")
+        return False
+
+    print_info(f"Retrieving asset {blob_name} from gallery...")
+
+    if not asset_id:
+        print_error("Asset id missing, cannot query gallery metadata")
+        return False
     
     try:
         # Wait a moment for Cosmos DB consistency
@@ -260,7 +296,7 @@ def test_gallery_retrieval(asset_id: str) -> bool:
             # Look for our asset
             found = False
             for item in items:
-                if item.get('id') == asset_id:
+                if item.get('name') == blob_name or item.get('id') == asset_id:
                     found = True
                     print_success(f"Found saved image in gallery")
                     print_info(f"Name: {item.get('name')}")
@@ -271,7 +307,7 @@ def test_gallery_retrieval(asset_id: str) -> bool:
             if not found:
                 print_error(f"Asset {asset_id} not found in gallery")
                 print_info("This might be a timing issue - checking metadata directly...")
-                return test_metadata_retrieval(asset_id)
+                return test_metadata_retrieval(asset_info)
             
             return found
         else:
@@ -283,11 +319,17 @@ def test_gallery_retrieval(asset_id: str) -> bool:
         return False
 
 
-def test_metadata_retrieval(asset_id: str) -> bool:
+def test_metadata_retrieval(asset_info: Dict[str, str]) -> bool:
     """Test retrieving metadata directly from Cosmos DB"""
     print_info("Checking metadata directly...")
     
     try:
+        blob_name = asset_info.get('blob_name')
+        asset_id = asset_info.get('asset_id')
+        if not asset_id:
+            print_error("No asset id provided for metadata check")
+            return False
+        print_info(f"Looking up metadata for asset id: {asset_id}")
         response = requests.get(
             f"{API_V1}/metadata/{asset_id}",
             params={"media_type": "image"},
@@ -319,14 +361,16 @@ def test_pipeline_endpoint() -> bool:
     print_section("7. Pipeline Endpoint (Generate + Save)")
     
     pipeline_payload = {
-        "actions": ["generate", "save"],
+        "action": "generate",
         "prompt": "A modern tech workspace with multiple monitors",
         "model": "gpt-image-1",
         "n": 1,
         "size": "1024x1024",
+        "response_format": "b64_json",
         "quality": "high",
         "output_format": "png",
         "save_options": {
+            "enabled": True,
             "folder_path": "e2e-test-pipeline",
             "metadata": {
                 "test_type": "pipeline",
@@ -338,9 +382,12 @@ def test_pipeline_endpoint() -> bool:
     print_info("Running pipeline: generate + save...")
     
     try:
+        files = {
+            "payload": (None, json.dumps(pipeline_payload), "application/json")
+        }
         response = requests.post(
             f"{API_V1}/images/pipeline",
-            json=pipeline_payload,
+            files=files,
             timeout=90  # Pipeline can take longer
         )
         
@@ -355,10 +402,11 @@ def test_pipeline_endpoint() -> bool:
                 # Check individual steps
                 steps = data.get('steps', [])
                 for step in steps:
-                    action = step.get('action')
+                    step_name = step.get('step', 'step')
                     success = step.get('success')
                     status = Colors.GREEN + "✓" if success else Colors.RED + "✗"
-                    print(f"  {status} {action}: {step.get('message', 'OK')}{Colors.RESET}")
+                    message = step.get('message', 'OK')
+                    print(f"  {status} {step_name}: {message}{Colors.RESET}")
                 
                 # Print final results
                 if data.get('final_images'):
@@ -408,12 +456,12 @@ def main():
     
     if generation_data:
         # Test 5: Image Save
-        asset_id = test_image_save(generation_data)
-        results['save'] = asset_id is not None
+        saved_asset = test_image_save(generation_data)
+        results['save'] = saved_asset is not None
         
-        if asset_id:
+        if saved_asset:
             # Test 6: Gallery Retrieval
-            results['gallery'] = test_gallery_retrieval(asset_id)
+            results['gallery'] = test_gallery_retrieval(saved_asset)
     else:
         results['save'] = False
         results['gallery'] = False
