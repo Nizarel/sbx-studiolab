@@ -356,9 +356,56 @@ def test_metadata_retrieval(asset_info: Dict[str, str]) -> bool:
         return False
 
 
+def test_prompt_enhancement() -> bool:
+    """Test the prompt enhancement endpoint backed by the configured LLM"""
+    print_section("7. Prompt Enhancement")
+
+    payload = {
+        "original_prompt": "Cinematic sunrise establishing shot of a downtown coffee shop opening for the day"
+    }
+
+    print_info("Requesting enhanced prompt from language model...")
+
+    try:
+        response = requests.post(
+            f"{API_V1}/videos/prompt/enhance",
+            json=payload,
+            timeout=20
+        )
+
+        print_info(f"Response status: {response.status_code}")
+
+        if response.status_code == 200:
+            data = response.json()
+            enhanced_prompt = data.get("enhanced_prompt")
+
+            if isinstance(enhanced_prompt, str) and enhanced_prompt.strip():
+                preview = enhanced_prompt.strip()
+                if len(preview) > 120:
+                    preview = preview[:117] + "..."
+                print_success("Prompt enhancement returned text")
+                print_info(f"Enhanced prompt preview: {preview}")
+
+                original = payload["original_prompt"].strip().lower()
+                if enhanced_prompt.strip().lower() == original:
+                    print_info("Note: Enhanced prompt matches the original")
+
+                return True
+            else:
+                print_error("Prompt enhancement response missing enhanced_prompt text")
+                return False
+        else:
+            print_error(f"Prompt enhancement failed: {response.text[:500]}")
+            return False
+
+    except Exception as e:
+        print_error(f"Prompt enhancement failed: {str(e)}")
+        return False
+
+
 def test_pipeline_endpoint() -> bool:
     """Test the complete pipeline endpoint (generate + save in one call)"""
-    print_section("7. Pipeline Endpoint (Generate + Save)")
+    print_section("8. Pipeline Endpoint (Generate + Save)")
     
     pipeline_payload = {
         "action": "generate",
@@ -466,7 +513,10 @@ def main():
         results['save'] = False
         results['gallery'] = False
     
-    # Test 7: Pipeline Endpoint
+    # Test 7: Prompt Enhancement (GPT-4o)
+    results['prompt_enhancement'] = test_prompt_enhancement()
+
+    # Test 8: Pipeline Endpoint
     results['pipeline'] = test_pipeline_endpoint()
     
     # Summary
