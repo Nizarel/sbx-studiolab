@@ -44,7 +44,7 @@ class Sora:
         response = self.client.videos.create(
             model=self.deployment_name,
             prompt=prompt,
-            seconds=seconds,
+            seconds=str(seconds),  # Must be string: '4', '8', or '12'
             size=size
         )
         
@@ -67,7 +67,7 @@ class Sora:
         response = self.client.videos.create(
             model=self.deployment_name,
             prompt=prompt,
-            seconds=seconds,
+            seconds=str(seconds),  # Must be string: '4', '8', or '12'
             size=size,
             input_reference=image_path
         )
@@ -142,22 +142,24 @@ class Sora:
     def create_remix_video_job(self, remix_video_id, prompt, seconds, size, n_variants=1):
         """
         Create a remix video generation job based on an existing video.
+        Note: remix_video_id parameter is not yet supported in OpenAI SDK 2.6.1
+        This will create a new video based on the prompt without remix functionality.
         
         Args:
-            remix_video_id: ID of the video to remix
+            remix_video_id: ID of the video to remix (currently ignored)
             prompt: Text prompt describing the desired changes
             seconds: Duration in seconds (4, 8, or 12)
             size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
             n_variants: Number of video variants to generate (ignored - not supported in SDK)
         """
-        logger.info(f"Creating Sora-2 remix job for video {remix_video_id} with prompt: {prompt[:50]}...")
+        logger.info(f"Creating Sora-2 video job (remix not yet supported in SDK) with prompt: {prompt[:50]}...")
         
+        # Note: remix_video_id is not supported yet, so we create a regular video
         response = self.client.videos.create(
             model=self.deployment_name,
             prompt=prompt,
-            seconds=seconds,
-            size=size,
-            remix_video_id=remix_video_id
+            seconds=str(seconds),  # Must be string: '4', '8', or '12'
+            size=size
         )
         
         return response.model_dump()

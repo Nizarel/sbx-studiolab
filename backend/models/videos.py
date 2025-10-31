@@ -34,11 +34,10 @@ class VideoGenerationJobResponse(BaseModel):
     """Response model for a video generation job"""
     id: str = Field(..., description="Job ID")
     status: str = Field(..., description="Current status of the job (queued, in_progress, completed, failed, cancelled)")
-    prompt: str = Field(..., description="Original prompt used for generation")
-    n_variants: int = Field(...,
-                            description="Number of video variants requested")
-    seconds: int = Field(..., description="Length of the video in seconds")
-    size: str = Field(..., description="Video resolution")
+    prompt: Optional[str] = Field(None, description="Original prompt used for generation")
+    n_variants: Optional[int] = Field(None, description="Number of video variants requested")
+    seconds: Optional[int] = Field(None, description="Length of the video in seconds")
+    size: Optional[str] = Field(None, description="Video resolution")
     generations: Optional[list] = Field(
         None, description="List of generated videos")
     created_at: Optional[int] = Field(
