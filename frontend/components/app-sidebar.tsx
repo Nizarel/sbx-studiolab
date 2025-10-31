@@ -133,10 +133,8 @@ export function AppSidebar() {
     loadVideoFolders();
   }, [folderRefreshTrigger]); // Re-run when folders are created/updated
 
-  // Determine logo based on theme
-  const logoSrc = mounted && theme === "dark" 
-    ? "/logo/logo-light.png"  // Light logo for dark theme (white/bright logo)
-    : "/logo/logo-dark.png";  // Dark logo for light theme (black/dark logo)
+  // Use Starbucks logo
+  const logoSrc = "/logo/starbucks-logo.svg";
     
   // Navigate to images page with folder filter
   const handleImageFolderClick = (folderPath: string) => {
@@ -190,38 +188,27 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:justify-center">
         {mounted ? (
           <>
-            <div className="flex items-center group-data-[collapsible=icon]:hidden">
+            <Link href="/" className="flex items-center group-data-[collapsible=icon]:hidden hover:opacity-80 transition-opacity">
               <Image 
                 src={logoSrc} 
-                alt="Visionary Lab" 
-                width={30} 
-                height={30} 
-                className="mr-2"
-                onError={(e) => {
-                  // Fallback to SVG if PNG fails to load
-                  const imgElement = e.currentTarget;
-                  if (logoSrc.endsWith('.png')) {
-                    imgElement.src = logoSrc.replace('.png', '.svg');
-                  }
-                }}
+                alt="Starbucks Video Studio" 
+                width={40} 
+                height={40} 
+                className="mr-3"
               />
-              <h2 className="font-semibold text-lg">Visionary Lab</h2>
-            </div>
-            <div className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
+              <div className="flex flex-col">
+                <h2 className="font-bold text-lg text-primary leading-tight">STARBUCKS</h2>
+                <span className="text-xs text-muted-foreground">Video Studio</span>
+              </div>
+            </Link>
+            <Link href="/" className="hidden group-data-[collapsible=icon]:flex items-center justify-center hover:opacity-80 transition-opacity">
               <Image 
                 src={logoSrc} 
-                alt="Visionary Lab" 
-                width={24} 
-                height={24}
-                onError={(e) => {
-                  // Fallback to SVG if PNG fails to load
-                  const imgElement = e.currentTarget;
-                  if (logoSrc.endsWith('.png')) {
-                    imgElement.src = logoSrc.replace('.png', '.svg');
-                  }
-                }}
+                alt="Starbucks Video Studio" 
+                width={32} 
+                height={32}
               />
-            </div>
+            </Link>
           </>
         ) : (
           // Placeholder during SSR

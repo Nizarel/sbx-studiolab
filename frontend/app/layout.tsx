@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider"
 import { AppSidebar } from "@/components/app-sidebar";
@@ -21,33 +21,35 @@ type RootLayoutProps = {
   children: React.ReactNode
 }
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const poppins = Poppins({
+  weight: ['400', '500', '600', '700'],
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-poppins",
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: "Visionary Lab",
+  title: "Starbucks Video Studio",
   description: "AI-powered Content Generation",
   manifest: "/manifest.json",
   icons: {
+    icon: [
+      { url: "/logo/starbucks-logo.svg", type: "image/svg+xml" },
+      { url: "/logo/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
     apple: "/logo/icon-192.png",
+    shortcut: "/logo/starbucks-logo.svg",
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Visionary Lab",
+    title: "Starbucks Video Studio",
   },
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "default",
-    "msapplication-TileColor": "#000000",
+    "msapplication-TileColor": "#00704A",
   },
 };
 
@@ -55,19 +57,19 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#000000",
+  themeColor: "#00704A",
 };
 
 export default async function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en" suppressHydrationWarning className={`  antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${poppins.variable} antialiased`}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_API_HOSTNAME || "localhost"} />
         <meta name="format-detection" content="telephone=no" />
       </head>
-      <body className="overflow-hidden">
+      <body className="overflow-hidden" style={{ fontFamily: 'var(--font-poppins), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
