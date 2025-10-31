@@ -106,7 +106,7 @@ export function VideoOverlay({
   // Add missing video settings states
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
-  const [duration, setDuration] = useState("5s");
+  const [duration, setDuration] = useState("8s");
   const [variants, setVariants] = useState("2");
   const [analyzeVideo, setAnalyzeVideo] = useState(true);
   const [isWizardEnhancing, setIsWizardEnhancing] = useState(false);
@@ -736,14 +736,13 @@ export function VideoOverlay({
                               <SelectTrigger className="w-[120px] h-8">
                                 <div className="flex items-center">
                                   <Timer className="h-4 w-4 mr-2" />
-                                  <SelectValue placeholder="5s" />
+                                  <SelectValue placeholder="8s" />
                                 </div>
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="5s">5s</SelectItem>
-                                <SelectItem value="10s">10s</SelectItem>
-                                <SelectItem value="15s">15s</SelectItem>
-                                <SelectItem value="20s">20s</SelectItem>
+                                <SelectItem value="4s">4s</SelectItem>
+                                <SelectItem value="8s">8s</SelectItem>
+                                <SelectItem value="12s">12s</SelectItem>
                               </SelectContent>
                             </Select>
                           </TooltipTrigger>
