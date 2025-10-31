@@ -1,4 +1,4 @@
-from openai import AzureOpenAI
+from openai import OpenAI
 import os
 import logging
 import json
@@ -17,11 +17,13 @@ class Sora:
         self.api_key = api_key
         self.api_version = api_version
         
-        # Initialize OpenAI client for Sora-2
-        self.client = AzureOpenAI(
+        # Initialize OpenAI client for Sora-2 with Azure endpoint
+        # Note: Must use base OpenAI class (not AzureOpenAI) for videos API support
+        azure_endpoint = f"https://{resource_name}.openai.azure.com"
+        self.client = OpenAI(
             api_key=api_key,
-            api_version=api_version,
-            azure_endpoint=f"https://{resource_name}.openai.azure.com"
+            base_url=f"{azure_endpoint}/openai/v1/",
+            default_headers={"api-key": api_key}
         )
         
         logger.info(
@@ -35,7 +37,7 @@ class Sora:
             prompt: Text prompt for video generation
             seconds: Duration in seconds (4, 8, or 12)
             size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
-            n_variants: Number of video variants to generate (default 1)
+            n_variants: Number of video variants to generate (ignored - not supported in SDK)
         """
         logger.info(f"Creating Sora-2 video generation job with prompt: {prompt[:50]}...")
         
@@ -43,8 +45,7 @@ class Sora:
             model=self.deployment_name,
             prompt=prompt,
             seconds=seconds,
-            size=size,
-            n=n_variants
+            size=size
         )
         
         return response.model_dump()
@@ -59,7 +60,7 @@ class Sora:
             image_path: Path to the input reference image
             seconds: Duration in seconds (4, 8, or 12)
             size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
-            n_variants: Number of video variants to generate (default 1)
+            n_variants: Number of video variants to generate (ignored - not supported in SDK)
         """
         logger.info(f"Creating Sora-2 video job with input reference and prompt: {prompt[:50]}...")
         
@@ -68,7 +69,6 @@ class Sora:
             prompt=prompt,
             seconds=seconds,
             size=size,
-            n=n_variants,
             input_reference=image_path
         )
         
@@ -101,15 +101,13 @@ class Sora:
         List video generation jobs.
         
         Args:
-            before: Cursor for pagination (before this ID)
-            after: Cursor for pagination (after this ID)
+            before: Cursor for pagination (not supported in current SDK)
+            after: Cursor for pagination (not supported in current SDK)
             limit: Maximum number of results (default 10)
         """
         logger.info(f"Listing Sora-2 video generation jobs with limit: {limit}")
         response = self.client.videos.list(
-            limit=limit,
-            before=before,
-            after=after
+            limit=limit
         )
         return response.model_dump()
 
@@ -150,7 +148,7 @@ class Sora:
             prompt: Text prompt describing the desired changes
             seconds: Duration in seconds (4, 8, or 12)
             size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
-            n_variants: Number of video variants to generate (default 1)
+            n_variants: Number of video variants to generate (ignored - not supported in SDK)
         """
         logger.info(f"Creating Sora-2 remix job for video {remix_video_id} with prompt: {prompt[:50]}...")
         
@@ -159,7 +157,6 @@ class Sora:
             prompt=prompt,
             seconds=seconds,
             size=size,
-            n=n_variants,
             remix_video_id=remix_video_id
         )
         
