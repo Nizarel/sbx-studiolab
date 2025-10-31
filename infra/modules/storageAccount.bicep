@@ -10,10 +10,15 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = if(depl
     name: 'Standard_LRS'
   }
   kind: 'StorageV2'
-  properties: {}
+  properties: {
+    allowBlobPublicAccess: true
+    allowSharedKeyAccess: false
+    publicNetworkAccess: 'Enabled'
+    minimumTlsVersion: 'TLS1_2'
+  }
 }
 
-output storageAccountPrimaryEndpoint string = storageAccount.properties.primaryEndpoints.blob
-output storageAccountId string = storageAccount.id
-output storageAccountKey string = storageAccount.listKeys().keys[0].value
+output storageAccountPrimaryEndpoint string = deployNew ? storageAccount.properties.primaryEndpoints.blob : ''
+output storageAccountId string = deployNew ? storageAccount.id : ''
+output storageAccountName string = storageAccountName
 

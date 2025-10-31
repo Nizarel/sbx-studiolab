@@ -5,7 +5,7 @@ param deployNew bool = true
 resource storageContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2022-09-01' = if (deployNew) {
   name: '${storageAccountName}/default/${containerName}'
   properties: {
-    publicAccess: 'None'
+    publicAccess: 'Blob'
   }
 }
 

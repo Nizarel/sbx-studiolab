@@ -1,5 +1,14 @@
-import { fetchGalleryVideos, GalleryItem, MediaType, fetchGalleryImages } from "@/services/api";
-import { sasTokenService } from "@/services/sas-token";
+import { fetchGalleryVideos, GalleryItem, MediaType, fetchGalleryImages, API_BASE_URL } from "@/services/api";
+
+/**
+ * Convert Azure Blob Storage item name to backend proxy URL
+ * Since managed identity is enabled and public/SAS access is disabled,
+ * all blob access must go through the backend proxy
+ */
+function getBlobProxyUrl(blobName: string, isVideo: boolean): string {
+  const container = isVideo ? 'videos' : 'images';
+  return `${API_BASE_URL}/gallery/${container}/${blobName}`;
+}
 
 export interface VideoMetadata {
   src: string;
@@ -25,16 +34,16 @@ export interface VideoMetadata {
 /**
  * Convert GalleryItem to VideoMetadata
  */
-async function mapGalleryItemToVideoMetadata(item: GalleryItem): Promise<VideoMetadata> {
+function mapGalleryItemToVideoMetadata(item: GalleryItem): VideoMetadata {
   // Extract title from prompt (preferred) or name
   const title = item.metadata?.prompt || item.name.split('.')[0].replace(/_/g, ' ');
   
   // Extract description from metadata
   const description = item.metadata?.description || '';
   
-  // Get direct URL with SAS token
-  const src = await sasTokenService.getBlobUrl(item.name, item.media_type === MediaType.VIDEO);
-  console.log(`Using direct blob URL for ${item.name}`);
+  // Get URL through backend proxy (managed identity)
+  const src = getBlobProxyUrl(item.name, item.media_type === MediaType.VIDEO);
+  console.log(`Using backend proxy URL for ${item.name}`);
   
   // Extract analysis metadata from CosmosDB nested structure
   let analysis: VideoMetadata['analysis'] = undefined;
@@ -97,12 +106,10 @@ export async function fetchVideos(
     const response = await fetchGalleryVideos(limit, offset, undefined, undefined, folderPath);
     
     if (response.success && response.items.length > 0) {
-      // Map items to metadata with Promise.all to handle async mapping
-      const videoItemPromises = response.items
+      // Map items to metadata
+      const videoItems = response.items
         .filter(item => item.media_type === MediaType.VIDEO)
         .map((item) => mapGalleryItemToVideoMetadata(item));
-      
-      const videoItems = await Promise.all(videoItemPromises);
       
       // Assign sizes in a structured way
       return assignVideoSizes(videoItems);
@@ -119,7 +126,7 @@ export async function fetchVideos(
 /**
  * Convert GalleryItem to ImageMetadata
  */
-async function mapGalleryItemToImageMetadata(item: GalleryItem): Promise<ImageMetadata> {
+function mapGalleryItemToImageMetadata(item: GalleryItem): ImageMetadata {
   try {
     const normalizeToString = (value: unknown): string => {
       if (typeof value === 'string') return value;
@@ -188,9 +195,9 @@ async function mapGalleryItemToImageMetadata(item: GalleryItem): Promise<ImageMe
     const descriptionSource = item.metadata?.analysis?.summary ?? item.metadata?.description ?? '';
     const description = normalizeToString(descriptionSource);
 
-    // Use direct SAS token URL (false for images, true for videos)
-    const src = await sasTokenService.getBlobUrl(item.name, false);
-    console.log(`Using direct blob URL for ${item.name}`);
+    // Use backend proxy URL (managed identity - no SAS tokens)
+    const src = getBlobProxyUrl(item.name, false);
+    console.log(`Using backend proxy URL for ${item.name}`);
 
     // Extract tags from CosmosDB analysis structure
     const tags = normalizeTags(item.metadata?.analysis?.tags ?? item.metadata?.tags);
@@ -307,24 +314,19 @@ export async function fetchImages(
         return [];
       }
       
-      // Map items to metadata with Promise.allSettled to handle individual failures
-      const imageItemPromises = imageItems.map(async (item, index) => {
-        try {
-          const metadata = await mapGalleryItemToImageMetadata(item);
-          console.log(`Successfully mapped item ${index + 1}/${imageItems.length}: ${item.name}`);
-          return metadata;
-        } catch (error) {
-          console.error(`Failed to map item ${item.name}:`, error);
-          return null;
-        }
-      });
-      
-      const results = await Promise.allSettled(imageItemPromises);
-      const successfulItems = results
-        .filter((result): result is PromiseFulfilledResult<ImageMetadata> => 
-          result.status === 'fulfilled' && result.value !== null
-        )
-        .map(result => result.value);
+      // Map items to metadata
+      const successfulItems = imageItems
+        .map((item, index) => {
+          try {
+            const metadata = mapGalleryItemToImageMetadata(item);
+            console.log(`Successfully mapped item ${index + 1}/${imageItems.length}: ${item.name}`);
+            return metadata;
+          } catch (error) {
+            console.error(`Failed to map item ${item.name}:`, error);
+            return null;
+          }
+        })
+        .filter((item): item is ImageMetadata => item !== null);
       
       console.log(`Successfully processed ${successfulItems.length}/${imageItems.length} images`);
       

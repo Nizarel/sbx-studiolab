@@ -890,30 +890,9 @@ export async function analyzeVideo(videoName: string, retries = 3): Promise<Vide
   let lastError: Error | null = null;
   
   try {
-    // First, get the SAS tokens to construct the full URL properly
-    const sasTokensResponse = await fetch(`${API_BASE_URL}/gallery/sas-tokens`);
-    
-    if (!sasTokensResponse.ok) {
-      throw new Error(`Failed to get SAS tokens: ${sasTokensResponse.status} ${sasTokensResponse.statusText}`);
-    }
-    
-    const sasTokens = await sasTokensResponse.json();
-    
-    // Check if we have the video container URL
-    if (!sasTokens.video_container_url) {
-      console.error('Missing required video_container_url from SAS tokens:', sasTokens);
-      throw new Error('Missing required video container URL from SAS tokens');
-    }
-    
-    // Use the actual video_container_url from the SAS tokens response
-    const videoContainerUrl = sasTokens.video_container_url;
-    const videoSasToken = sasTokens.video_sas_token;
-    
-    // Construct a proper Azure blob storage URL
-    const videoPath = `${videoContainerUrl}/${videoName}${videoSasToken ? `?${videoSasToken}` : ''}`;
-    
+    // Using managed identity - backend will download video using blob name
     if (API_DEBUG) {
-      console.log(`Constructed video path for analysis: ${videoPath}`);
+      console.log(`Sending video blob name for analysis: ${videoName}`);
     }
     
     while (attempt < retries) {
@@ -933,7 +912,7 @@ export async function analyzeVideo(videoName: string, retries = 3): Promise<Vide
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ video_path: videoPath }),
+          body: JSON.stringify({ video_path: videoName }),
           signal: controller.signal
         });
         

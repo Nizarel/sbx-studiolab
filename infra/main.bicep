@@ -194,7 +194,6 @@ module containerAppBackend './modules/containerApp.bicep' = {
     targetPort: 80
     deployNew: true // set false to reuse an existing container app
     AZURE_BLOB_SERVICE_URL: storageAccountMod.outputs.storageAccountPrimaryEndpoint
-    AZURE_STORAGE_ACCOUNT_KEY: storageAccountMod.outputs.storageAccountKey
     AZURE_STORAGE_ACCOUNT_NAME: storageAccountName
     AZURE_BLOB_IMAGE_CONTAINER: 'images'
     DOCKER_IMAGE: DOCKER_IMAGE_BACKEND
@@ -233,7 +232,6 @@ module containerAppFrontend './modules/containerApp.bicep' = {
     targetPort: 3000
     deployNew: true // set false to reuse an existing container app
     AZURE_BLOB_SERVICE_URL: storageAccountMod.outputs.storageAccountPrimaryEndpoint
-    AZURE_STORAGE_ACCOUNT_KEY: storageAccountMod.outputs.storageAccountKey
     AZURE_STORAGE_ACCOUNT_NAME: storageAccountName
     AZURE_BLOB_IMAGE_CONTAINER: 'images'
     DOCKER_IMAGE: DOCKER_IMAGE_FRONTEND

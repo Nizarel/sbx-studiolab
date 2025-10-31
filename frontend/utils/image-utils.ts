@@ -18,6 +18,11 @@ export function isExternalImageUrl(url: string): boolean {
     return true;
   }
   
+  // Check if it's a backend API URL (needs unoptimized handling)
+  if (url.startsWith('/api/v1/gallery/')) {
+    return true;
+  }
+  
   // Primarily check for Azure Blob Storage
   return isAzureBlobStorageUrl(url);
 }

@@ -2,7 +2,8 @@
 
 import Image from 'next/image';
 import { useState, forwardRef } from 'react';
-import { isExternalImageUrl, getFallbackImageUrl, type ImageLoadingType, IMAGE_LOADING_CONFIG } from '@/utils/image-utils';
+import { isExternalImageUrl, getFallbackImageUrl, type ImageLoadingType, IMAGE_LOADING_CONFIG, isAzureBlobStorageUrl } from '@/utils/image-utils';
+import { API_BASE_URL } from '@/services/api';
 
 interface OptimizedImageProps {
   src: string;
@@ -17,6 +18,34 @@ interface OptimizedImageProps {
   height?: number;
   loadingType?: ImageLoadingType;
   quality?: number;
+}
+
+/**
+ * Convert Azure Blob Storage URL to backend proxy URL
+ * Since managed identity is enabled and public access is disabled,
+ * all blob access must go through the backend
+ */
+function getProxiedImageUrl(url: string): string {
+  // If it's already a backend URL, return as-is
+  if (url.startsWith(API_BASE_URL)) {
+    return url;
+  }
+  
+  // If it's an Azure Blob Storage URL, proxy it through backend
+  if (isAzureBlobStorageUrl(url)) {
+    // Extract blob name from URL
+    // Format: https://<account>.blob.core.windows.net/<container>/<blobname>
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(p => p);
+    if (pathParts.length >= 2) {
+      const container = pathParts[0];
+      const blobName = pathParts.slice(1).join('/');
+      // Route through backend proxy endpoint
+      return `${API_BASE_URL}/gallery/${container}/${blobName}`;
+    }
+  }
+  
+  return url;
 }
 
 // Custom image component that handles external URLs gracefully
@@ -44,9 +73,11 @@ export const OptimizedImage = forwardRef<HTMLImageElement, OptimizedImageProps>(
     const finalPriority = priority !== undefined ? priority : loadingConfig.priority;
     const finalQuality = quality || loadingConfig.quality;
     
-    // Check if the image is from an external source or has SAS tokens
-    const isExternal = isExternalImageUrl(src);
-    const hasSasToken = src.includes('?sv=') || src.includes('?sig=');
+    // Convert Azure Blob URLs to backend proxy URLs
+    const proxiedSrc = getProxiedImageUrl(src);
+    
+    // Check if the image is from an external source
+    const isExternal = isExternalImageUrl(proxiedSrc);
     
     // Handle image error
     const handleError = () => {
@@ -66,10 +97,10 @@ export const OptimizedImage = forwardRef<HTMLImageElement, OptimizedImageProps>(
     // Use fallback image if there was an error
     const imageSrc = imageError && fallbackUsed 
       ? getFallbackImageUrl(width || 400, height || 300)
-      : src;
+      : proxiedSrc;
     
-    // If it's an external image or has SAS tokens, use unoptimized
-    if (isExternal || hasSasToken) {
+    // Use unoptimized for external URLs (including backend-proxied images)
+    if (isExternal) {
       const safeWidth = !fill ? (width || 1024) : undefined;
       const safeHeight = !fill ? (height || 1024) : undefined;
       
@@ -92,7 +123,7 @@ export const OptimizedImage = forwardRef<HTMLImageElement, OptimizedImageProps>(
       );
     }
     
-    // For internal images without SAS tokens, use optimized version
+    // For internal images, use optimized version
     const safeWidth = !fill ? (width || 1024) : undefined;
     const safeHeight = !fill ? (height || 1024) : undefined;
     

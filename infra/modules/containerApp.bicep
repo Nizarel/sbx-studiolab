@@ -25,7 +25,6 @@ param SORA_AOAI_API_KEY string = ''
 // Azure Blob Storage
 param AZURE_BLOB_SERVICE_URL string
 param AZURE_STORAGE_ACCOUNT_NAME string
-param AZURE_STORAGE_ACCOUNT_KEY string
 param AZURE_BLOB_IMAGE_CONTAINER string = 'images'
 
 param targetPort int = 80
@@ -152,10 +151,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if(deployNew) {
             {
               name: 'AZURE_STORAGE_ACCOUNT_NAME'
               value: AZURE_STORAGE_ACCOUNT_NAME
-            }
-            {
-              name: 'AZURE_STORAGE_ACCOUNT_KEY'
-              value: AZURE_STORAGE_ACCOUNT_KEY
             }
             {
               name: 'AZURE_BLOB_IMAGE_CONTAINER'

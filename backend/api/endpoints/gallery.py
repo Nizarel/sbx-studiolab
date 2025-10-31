@@ -8,6 +8,7 @@ from fastapi import (
     Form,
     Body,
     BackgroundTasks,
+    Request,
 )
 from typing import Dict, List, Optional, Any
 from fastapi.responses import StreamingResponse
@@ -58,6 +59,7 @@ def get_cosmos_service() -> Optional[CosmosDBService]:
 
 @router.get("/images", response_model=GalleryResponse)
 async def get_gallery_images(
+    request: Request,
     limit: int = Query(
         50, description="Maximum number of items to return", ge=1, le=100
     ),
@@ -71,6 +73,9 @@ async def get_gallery_images(
 ):
     """Get gallery images from Cosmos DB metadata ONLY"""
     try:
+        # Get base URL from request (force HTTPS for external access)
+        base_url = str(request.base_url).rstrip('/')
+        base_url = base_url.replace('http://', 'https://')
         # Check if Cosmos DB service is available
         if not cosmos_service:
             logger.error("Cosmos DB service is not available")
@@ -100,12 +105,15 @@ async def get_gallery_images(
             # Extract technical metadata from custom_metadata if available
             custom_meta = metadata.get("custom_metadata", {})
 
+            # Construct absolute proxy URL for managed identity access
+            proxy_url = f"{base_url}/api/v1/gallery/{metadata['container']}/{metadata['blob_name']}"
+            
             gallery_items.append(
                 GalleryItem(
                     id=metadata["id"],
                     name=metadata["blob_name"],
                     media_type=MediaType.IMAGE,
-                    url=metadata["url"],
+                    url=proxy_url,  # Use proxy URL instead of direct blob URL
                     container=metadata["container"],
                     size=metadata["size"],
                     content_type=metadata.get("content_type"),
@@ -164,6 +172,7 @@ async def get_gallery_images(
 
 @router.get("/videos", response_model=GalleryResponse)
 async def get_gallery_videos(
+    request: Request,
     limit: int = Query(
         50, description="Maximum number of items to return", ge=1, le=100
     ),
@@ -177,6 +186,9 @@ async def get_gallery_videos(
 ):
     """Get gallery videos from Cosmos DB metadata ONLY"""
     try:
+        # Get base URL from request (force HTTPS for external access)
+        base_url = str(request.base_url).rstrip('/')
+        base_url = base_url.replace('http://', 'https://')
         # Parse tags if provided
         tag_list = None
         if tags:
@@ -198,12 +210,15 @@ async def get_gallery_videos(
             # Extract technical metadata from custom_metadata if available
             custom_meta = metadata.get("custom_metadata", {})
 
+            # Construct absolute proxy URL for managed identity access
+            proxy_url = f"{base_url}/api/v1/gallery/{metadata['container']}/{metadata['blob_name']}"
+
             gallery_items.append(
                 GalleryItem(
                     id=metadata["id"],
                     name=metadata["blob_name"],
                     media_type=MediaType.VIDEO,
-                    url=metadata["url"],
+                    url=proxy_url,  # Use proxy URL instead of direct blob URL
                     container=metadata["container"],
                     size=metadata["size"],
                     content_type=metadata.get("content_type"),
@@ -960,4 +975,43 @@ async def create_folder(
         raise
     except Exception as e:
         logger.error(f"Error in create_folder: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{container}/{blob_name:path}")
+async def proxy_blob_access(
+    container: str,
+    blob_name: str,
+    azure_storage_service: AzureBlobStorageService = Depends(
+        lambda: AzureBlobStorageService()
+    ),
+):
+    """
+    Proxy endpoint for blob storage access using managed identity.
+    Frontend routes all Azure Blob Storage URLs through this endpoint.
+    """
+    try:
+        content, content_type = azure_storage_service.get_asset_content(
+            blob_name, container
+        )
+
+        if not content:
+            raise HTTPException(
+                status_code=404, detail=f"Blob not found: {container}/{blob_name}"
+            )
+
+        filename = blob_name.split("/")[-1] if "/" in blob_name else blob_name
+
+        return StreamingResponse(
+            content=io.BytesIO(content),
+            media_type=content_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f"inline; filename={filename}",
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error proxying blob access: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
