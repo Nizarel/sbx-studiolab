@@ -40,33 +40,31 @@ const API_DEBUG = process.env.NEXT_PUBLIC_DEBUG_MODE === 'true';
 export interface VideoGenerationRequest {
   prompt: string;
   n_variants: number;
-  n_seconds: number;
-  height: number;
-  width: number;
+  seconds: number; // Sora-2: 4, 8, or 12
+  size: string; // Sora-2: "720x1280", "1280x720", "1024x1792", "1792x1024"
   metadata?: Record<string, string>;
-  // NEW: Optional source images for image+text to video
-  sourceImages?: File[];
+  // Optional single input reference image for Sora-2
+  input_reference?: File;
   // Optional direct fields for form usage
   folder_path?: string;
   analyze_video?: boolean;
+  remix_video_id?: string; // For remix feature
 }
 
 export interface VideoGenerationJob {
   id: string;
-  status: string;
+  status: string; // "queued", "in_progress", "completed", "failed", "cancelled"
   prompt: string;
   n_variants: number;
-  n_seconds: number;
-  height: number;
-  width: number;
+  seconds: number; // Sora-2 duration
+  size: string; // Sora-2 resolution
   metadata?: Record<string, string>;
   generations?: Array<{
     id: string;
     job_id: string;
     created_at: number;
-    width: number;
-    height: number;
-    n_seconds: number;
+    size: string;
+    seconds: number;
     prompt: string;
     url: string;
   }>;
@@ -286,9 +284,8 @@ export async function createVideoGenerationJob(request: VideoGenerationRequest):
   const formData = new FormData();
   formData.append('prompt', request.prompt);
   formData.append('n_variants', String(request.n_variants));
-  formData.append('n_seconds', String(request.n_seconds));
-  formData.append('height', String(request.height));
-  formData.append('width', String(request.width));
+  formData.append('seconds', String(request.seconds)); // Sora-2 parameter
+  formData.append('size', request.size); // Sora-2 parameter
 
   // Derive folder_path from either explicit field or metadata.folder
   const folderPath = request.folder_path || request.metadata?.folder;
@@ -304,11 +301,9 @@ export async function createVideoGenerationJob(request: VideoGenerationRequest):
     formData.append('analyze_video', String(analyze));
   }
 
-  // Append images if provided
-  if (request.sourceImages && request.sourceImages.length > 0) {
-    for (const file of request.sourceImages) {
-      formData.append('images', file, file.name);
-    }
+  // Append single input reference image if provided (Sora-2)
+  if (request.input_reference) {
+    formData.append('input_reference', request.input_reference, request.input_reference.name);
   }
 
   const response = await fetch(url, {
@@ -592,7 +587,7 @@ export function generateVideoFilename(prompt: string, generationId: string, exte
 }
 
 /**
- * Helper function to map video settings to API request
+ * Helper function to map video settings to Sora-2 API request
  */
 export function mapSettingsToApiRequest(settings: {
   prompt: string;
@@ -600,51 +595,38 @@ export function mapSettingsToApiRequest(settings: {
   duration: string; // e.g., "5s"
   variants: string; // e.g., "2"
   aspectRatio: string; // e.g., "16:9"
-  fps?: number; // Optional FPS
+  fps?: number; // Optional FPS (not used by Sora-2)
 }): VideoGenerationRequest {
-  // Parse duration (e.g., "5s" to 5)
-  const n_seconds = parseInt(settings.duration, 10) || 5; // Default to 5 if parsing fails
+  // Parse duration (e.g., "10s" to 10) - Sora-2 supports 4, 8, or 12
+  const seconds = parseInt(settings.duration, 10) || 10; // Default to 10 if parsing fails
 
   // Parse variants (e.g., "2" to 2)
   const n_variants = parseInt(settings.variants, 10) || 1; // Default to 1 if parsing fails
 
-  let width: number;
-  let height: number;
-
-  // Determine width and height based on resolution and aspect ratio
-  const res = settings.resolution;
+  // Determine Sora-2 size parameter based on aspect ratio
+  // Sora-2 sizes: "720x1280" (9:16), "1280x720" (16:9), "1024x1792" (9:16 vertical), "1792x1024" (16:9 horizontal)
+  let size: string;
   const ar = settings.aspectRatio;
 
   if (ar === "16:9") {
-    if (res === "480p") { width = 854; height = 480; }
-    else if (res === "720p") { width = 1280; height = 720; }
-    else if (res === "1080p") { width = 1920; height = 1080; }
-    else { width = 854; height = 480; } // Default for 16:9
-  } else if (ar === "1:1") {
-    if (res === "480p") { width = 480; height = 480; }
-    else if (res === "720p") { width = 720; height = 720; }
-    else if (res === "1080p") { width = 1080; height = 1080; }
-    else { width = 480; height = 480; } // Default for 1:1
+    size = "1280x720"; // Landscape 16:9
   } else if (ar === "9:16") {
-    if (res === "480p") { width = 480; height = 854; }
-    else if (res === "720p") { width = 720; height = 1280; }
-    else if (res === "1080p") { width = 1080; height = 1920; }
-    else { width = 480; height = 854; } // Default for 9:16
+    size = "720x1280"; // Portrait 9:16
+  } else if (ar === "16:9-large") {
+    size = "1792x1024"; // Large landscape
+  } else if (ar === "9:16-large") {
+    size = "1024x1792"; // Large portrait
   } else {
-    // Default case if aspectRatio is unexpected (e.g., old "4:3" somehow gets through)
-    // Fallback to a common 16:9, 480p resolution
-    width = 854; 
-    height = 480;
-    console.warn(`Unexpected aspectRatio: ${ar}, defaulting to 854x480`);
+    // Default to landscape 16:9
+    size = "1280x720";
+    console.warn(`Unexpected aspectRatio: ${ar}, defaulting to 1280x720`);
   }
 
   return {
     prompt: settings.prompt,
     n_variants,
-    n_seconds,
-    height,
-    width,
-    // fps: settings.fps, // Assuming backend doesn't support fps yet or it's handled differently
+    seconds,
+    size,
   };
 }
 
@@ -860,13 +842,12 @@ export interface VideoAnalysisResponse {
 export interface VideoGenerationWithAnalysisRequest {
   prompt: string;
   n_variants: number;
-  n_seconds: number;
-  height: number;
-  width: number;
+  seconds: number; // Sora-2 parameter
+  size: string; // Sora-2 parameter
   analyze_video: boolean;
   metadata?: Record<string, string>;
-  // NEW: Optional source images for image+text
-  sourceImages?: File[];
+  // Optional single input reference image for Sora-2
+  input_reference?: File;
 }
 
 export interface VideoGenerationWithAnalysisResponse {
@@ -1910,8 +1891,8 @@ export async function createVideoGenerationWithAnalysis(request: VideoGeneration
     console.log('Request:', request);
   }
 
-  // If images are present, prefer the multipart unified endpoint
-  if (request.sourceImages && request.sourceImages.length > 0) {
+  // If input reference image is present, use the multipart unified endpoint
+  if (request.input_reference) {
     return await createVideoGenerationWithAnalysisMultipart(request);
   }
 
@@ -1957,9 +1938,8 @@ export async function createVideoGenerationWithAnalysisMultipart(request: VideoG
   const formData = new FormData();
   formData.append('prompt', request.prompt);
   formData.append('n_variants', String(request.n_variants));
-  formData.append('n_seconds', String(request.n_seconds));
-  formData.append('height', String(request.height));
-  formData.append('width', String(request.width));
+  formData.append('seconds', String(request.seconds)); // Sora-2 parameter
+  formData.append('size', request.size); // Sora-2 parameter
   formData.append('analyze_video', String(request.analyze_video));
 
   // Provide folder via dedicated field for backend convenience
@@ -1973,10 +1953,9 @@ export async function createVideoGenerationWithAnalysisMultipart(request: VideoG
     formData.append('metadata', JSON.stringify(request.metadata));
   }
 
-  if (request.sourceImages && request.sourceImages.length > 0) {
-    for (const file of request.sourceImages) {
-      formData.append('images', file, file.name);
-    }
+  // Append single input reference if provided (Sora-2)
+  if (request.input_reference) {
+    formData.append('input_reference', request.input_reference, request.input_reference.name);
   }
 
   const response = await fetch(url, {
@@ -2050,4 +2029,51 @@ export async function analyzeAndUpdateVideoMetadata(videoName: string): Promise<
     console.error("Error in analyzeAndUpdateVideoMetadata:", error);
     throw error;
   }
-} 
+}
+
+/**
+ * Remix an existing video with Sora-2
+ */
+export interface VideoRemixRequest {
+  remix_video_id: string;
+  prompt: string;
+  n_variants: number;
+  seconds: number;
+  size: string;
+}
+
+export interface VideoRemixResponse {
+  job: VideoGenerationJob;
+  original_video_id: string;
+}
+
+export async function createRemixVideoJob(request: VideoRemixRequest): Promise<VideoRemixResponse> {
+  const url = `${API_BASE_URL}/videos/remix`;
+  
+  if (API_DEBUG) {
+    console.log(`Creating remix job for video ${request.remix_video_id}: ${request.prompt}`);
+    console.log(`POST ${url}`);
+    console.log('Request:', request);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (API_DEBUG) {
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      console.error('Error response:', await response.text().catch(() => 'Could not read response text'));
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to create remix job: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}

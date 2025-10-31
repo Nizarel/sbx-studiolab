@@ -17,30 +17,28 @@ class VideoPromptEnhancementResponse(BaseModel):
 
 
 class VideoGenerationRequest(BaseModel):
-    """Request model for generating videos using Sora"""
+    """Request model for generating videos using Sora-2"""
     prompt: str = Field(...,
                         description="Prompt describing the video to generate")
     n_variants: int = Field(
         1, description="Number of video variants to generate")
-    n_seconds: int = Field(10, description="Length of the video in seconds")
-    height: int = Field(720, description="Height of the video in pixels")
-    width: int = Field(1280, description="Width of the video in pixels")
-    has_source_images: Optional[bool] = Field(
-        False, description="Whether source images are included")
-    image_count: Optional[int] = Field(
-        None, description="Number of source images")
+    seconds: int = Field(10, description="Length of the video in seconds (4, 8, or 12)")
+    size: str = Field("1280x720", description="Video resolution (720x1280, 1280x720, 1024x1792, 1792x1024)")
+    input_reference: Optional[str] = Field(
+        None, description="Path to input reference image for video generation")
+    remix_video_id: Optional[str] = Field(
+        None, description="ID of video to remix (for remix feature)")
 
 
 class VideoGenerationJobResponse(BaseModel):
     """Response model for a video generation job"""
     id: str = Field(..., description="Job ID")
-    status: str = Field(..., description="Current status of the job")
+    status: str = Field(..., description="Current status of the job (queued, in_progress, completed, failed, cancelled)")
     prompt: str = Field(..., description="Original prompt used for generation")
     n_variants: int = Field(...,
                             description="Number of video variants requested")
-    n_seconds: int = Field(..., description="Length of the video in seconds")
-    height: int = Field(..., description="Height of the video in pixels")
-    width: int = Field(..., description="Width of the video in pixels")
+    seconds: int = Field(..., description="Length of the video in seconds")
+    size: str = Field(..., description="Video resolution")
     generations: Optional[list] = Field(
         None, description="List of generated videos")
     created_at: Optional[int] = Field(
@@ -90,9 +88,10 @@ class VideoGenerationWithAnalysisRequest(BaseModel):
                         description="Prompt describing the video to generate")
     n_variants: int = Field(
         1, description="Number of video variants to generate")
-    n_seconds: int = Field(10, description="Length of the video in seconds")
-    height: int = Field(720, description="Height of the video in pixels")
-    width: int = Field(1280, description="Width of the video in pixels")
+    seconds: int = Field(10, description="Length of the video in seconds (4, 8, or 12)")
+    size: str = Field("1280x720", description="Video resolution (720x1280, 1280x720, 1024x1792, 1792x1024)")
+    input_reference: Optional[str] = Field(
+        None, description="Path to input reference image")
     analyze_video: bool = Field(
         False, description="Whether to analyze the generated videos")
     metadata: Optional[Dict[str, str]] = Field(
@@ -107,3 +106,23 @@ class VideoGenerationWithAnalysisResponse(BaseModel):
         None, description="Analysis results for each generated video (if analysis was requested)")
     upload_results: Optional[List[Dict[str, str]]] = Field(
         None, description="Upload results for each video to gallery")
+
+
+class VideoRemixRequest(BaseModel):
+    """Request model for remixing an existing video"""
+    remix_video_id: str = Field(...,
+                                description="ID of the video to remix")
+    prompt: str = Field(...,
+                        description="Prompt describing the desired changes")
+    n_variants: int = Field(
+        1, description="Number of remix variants to generate")
+    seconds: int = Field(10, description="Length of the remix video in seconds (4, 8, or 12)")
+    size: str = Field("1280x720", description="Video resolution (720x1280, 1280x720, 1024x1792, 1792x1024)")
+
+
+class VideoRemixResponse(BaseModel):
+    """Response model for video remix job"""
+    job: VideoGenerationJobResponse = Field(...,
+                                            description="Remix job details")
+    original_video_id: str = Field(...,
+                                   description="ID of the original video that was remixed")

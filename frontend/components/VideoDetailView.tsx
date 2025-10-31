@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   X, ChevronLeft, ChevronRight, Play, Pause, 
-  Download, Trash2, FolderUp, Eye, Loader2, Maximize, Minimize 
+  Download, Trash2, FolderUp, Eye, Loader2, Maximize, Minimize, Wand2 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MediaType, deleteGalleryAsset, VideoAnalysisResponse, fetchFolders, moveAsset, analyzeAndUpdateVideoMetadata } from "@/services/api";
 import { VideoMetadata } from "@/utils/gallery-utils";
+import { VideoRemixDialog } from "@/components/VideoRemixDialog";
 
 interface VideoDetailViewProps {
   video: VideoMetadata | null;
@@ -54,6 +55,7 @@ export function VideoDetailView({
   const [folders, setFolders] = useState<string[]>([]);
   const [isFoldersLoading, setIsFoldersLoading] = useState(false);
   const [isError, setIsError] = useState(false);
+  const [remixDialogOpen, setRemixDialogOpen] = useState(false);
 
   // Load folders when dropdown is opened
   const loadFolders = async () => {
@@ -516,7 +518,20 @@ export function VideoDetailView({
   if (!video) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center overflow-hidden">
+    <>
+      {/* Remix Dialog */}
+      {video?.generationId && (
+        <VideoRemixDialog
+          open={remixDialogOpen}
+          onOpenChange={setRemixDialogOpen}
+          videoId={video.generationId}
+          originalPrompt={video.prompt}
+          currentSize={video.resolution}
+          currentDuration={video.duration}
+        />
+      )}
+      
+      <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center overflow-hidden">
       <div 
         ref={containerRef}
         className="bg-background w-full max-w-[90vw] max-h-[90vh] rounded-xl shadow-md flex flex-col"
@@ -563,6 +578,19 @@ export function VideoDetailView({
           )}
           
           <div className="flex items-center gap-2">
+            {video?.generationId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setRemixDialogOpen(true)}
+                className="h-8 w-8"
+                disabled={isLoading}
+              >
+                <Wand2 className="h-4 w-4" />
+                <span className="sr-only">Remix video</span>
+              </Button>
+            )}
+            
             <Button
               variant="ghost"
               size="icon"
@@ -923,5 +951,6 @@ export function VideoDetailView({
         </div>
       </div>
     </div>
+    </>
   );
 } 

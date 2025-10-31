@@ -1,9 +1,9 @@
-import requests
+from openai import AzureOpenAI
 import os
 import logging
 import json
 import io
-from typing import List
+from typing import List, Optional
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -11,144 +11,107 @@ logger = logging.getLogger(__name__)
 
 
 class Sora:
-    def __init__(self, resource_name, deployment_name, api_key, api_version="preview"):
+    def __init__(self, resource_name, deployment_name, api_key, api_version="2025-01-01-preview"):
         self.resource_name = resource_name
         self.deployment_name = deployment_name
         self.api_key = api_key
         self.api_version = api_version
-        self.base_url = f"https://{self.resource_name}.openai.azure.com/openai/v1/video"
-
-        self.headers = {
-            "api-key": self.api_key,
-            "Content-Type": "application/json"
-        }
-        logger.info(
-            f"Initialized Sora client with resource: {resource_name}, deployment: {deployment_name}")
-
-    def create_video_generation_job(self, prompt, n_seconds, height, width, n_variants=1):
-        url = f"{self.base_url}/generations/jobs?api-version={self.api_version}"
-        payload = {
-            "model": self.deployment_name,
-            "prompt": prompt,
-            "n_seconds": n_seconds,
-            "height": height,
-            "width": width,
-            "n_variants": n_variants
-        }
-        logger.info(
-            f"Creating video generation job with prompt: {prompt[:50]}...")
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def create_video_generation_job_with_images(self, prompt, images, image_filenames, n_seconds, height, width, n_variants=1):
-        """Create video generation job with image inpainting using multipart upload.
-        First attempts without explicit crop bounds to let API defaults apply.
-        If the API rejects the request, retries once including full-image crop bounds.
-        """
-        url = f"{self.base_url}/generations/jobs?api-version={self.api_version}"
         
-        def build_files():
-            return [("files", (filename, io.BytesIO(image_content), "image/jpeg"))
-                    for image_content, filename in zip(images, image_filenames)]
-
-        # Remove Content-Type from headers for multipart request
-        multipart_headers = {k: v for k, v in self.headers.items() if k.lower() != "content-type"}
-
-        # Common form fields
-        base_data = {
-            "prompt": prompt,
-            "height": str(height),
-            "width": str(width),
-            "n_seconds": str(n_seconds),
-            "n_variants": str(n_variants),
-            "model": self.deployment_name,
-        }
-
-        # Attempt 1: Without crop_bounds to rely on API defaults
-        data_no_crop = {
-            **base_data,
-            "inpaint_items": json.dumps([
-                {
-                    "frame_index": 0,
-                    "type": "image",
-                    "file_name": filename,
-                } for filename in image_filenames
-            ])
-        }
-
-        logger.info(f"Creating video job (no crop bounds) with {len(images)} images and prompt: {prompt[:50]}...")
-        response = requests.post(
-            url,
-            headers=multipart_headers,
-            data=data_no_crop,
-            files=build_files()
+        # Initialize OpenAI client for Sora-2
+        self.client = AzureOpenAI(
+            api_key=api_key,
+            api_version=api_version,
+            azure_endpoint=f"https://{resource_name}.openai.azure.com"
         )
+        
+        logger.info(
+            f"Initialized Sora-2 client with resource: {resource_name}, deployment: {deployment_name}")
 
-        if response.ok:
-            return response.json()
-
-        # Log and retry once with full-image crop bounds if the first attempt failed
-        logger.warning(
-            f"SORA API rejected request without crop bounds: {response.status_code} {response.text}. Retrying with crop bounds.")
-
-        data_with_crop = {
-            **base_data,
-            "inpaint_items": json.dumps([
-                {
-                    "frame_index": 0,
-                    "type": "image",
-                    "file_name": filename,
-                    "crop_bounds": {
-                        "left_fraction": 0.0,
-                        "top_fraction": 0.0,
-                        "right_fraction": 1.0,
-                        "bottom_fraction": 1.0,
-                    },
-                } for filename in image_filenames
-            ])
-        }
-
-        response2 = requests.post(
-            url,
-            headers=multipart_headers,
-            data=data_with_crop,
-            files=build_files()
+    def create_video_generation_job(self, prompt, seconds, size, n_variants=1):
+        """
+        Create a video generation job with Sora-2.
+        
+        Args:
+            prompt: Text prompt for video generation
+            seconds: Duration in seconds (4, 8, or 12)
+            size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
+            n_variants: Number of video variants to generate (default 1)
+        """
+        logger.info(f"Creating Sora-2 video generation job with prompt: {prompt[:50]}...")
+        
+        response = self.client.videos.create(
+            model=self.deployment_name,
+            prompt=prompt,
+            seconds=seconds,
+            size=size,
+            n=n_variants
         )
+        
+        return response.model_dump()
 
-        if not response2.ok:
-            logger.error(f"SORA API error (with crop bounds): {response2.status_code} {response2.text}")
-            response2.raise_for_status()
-
-        return response2.json()
+    def create_video_generation_job_with_images(self, prompt, image_path, seconds, size, n_variants=1):
+        """
+        Create video generation job with single input reference image for Sora-2.
+        Sora-2 uses a single input_reference instead of multiple images.
+        
+        Args:
+            prompt: Text prompt for video generation
+            image_path: Path to the input reference image
+            seconds: Duration in seconds (4, 8, or 12)
+            size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
+            n_variants: Number of video variants to generate (default 1)
+        """
+        logger.info(f"Creating Sora-2 video job with input reference and prompt: {prompt[:50]}...")
+        
+        response = self.client.videos.create(
+            model=self.deployment_name,
+            prompt=prompt,
+            seconds=seconds,
+            size=size,
+            n=n_variants,
+            input_reference=image_path
+        )
+        
+        return response.model_dump()
 
     def get_video_generation_job(self, job_id):
-        url = f"{self.base_url}/generations/jobs/{job_id}?api-version={self.api_version}"
-        logger.info(f"Getting video generation job: {job_id}")
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
+        """
+        Retrieve the status and details of a video generation job.
+        
+        Args:
+            job_id: The video generation job ID
+        """
+        logger.info(f"Getting Sora-2 video generation job: {job_id}")
+        response = self.client.videos.retrieve(job_id)
+        return response.model_dump()
 
     def delete_video_generation_job(self, job_id):
-        url = f"{self.base_url}/generations/jobs/{job_id}?api-version={self.api_version}"
-        logger.info(f"Deleting video generation job: {job_id}")
-        response = requests.delete(url, headers=self.headers)
-        response.raise_for_status()
-        return response.status_code
+        """
+        Delete a video generation job.
+        
+        Args:
+            job_id: The video generation job ID
+        """
+        logger.info(f"Deleting Sora-2 video generation job: {job_id}")
+        response = self.client.videos.delete(job_id)
+        return response.deleted
 
-    def list_video_generation_jobs(self, before=None, after=None, limit=10, statuses=None):
-        url = f"{self.base_url}/generations/jobs?api-version={self.api_version}"
-        params = {"limit": limit}
-        if before:
-            params["before"] = before
-        if after:
-            params["after"] = after
-        if statuses:
-            params["statuses"] = ",".join(statuses)
-        logger.info(f"Listing video generation jobs with params: {params}")
-        response = requests.get(url, headers=self.headers, params=params)
-        response.raise_for_status()
-        return response.json()
+    def list_video_generation_jobs(self, before=None, after=None, limit=10):
+        """
+        List video generation jobs.
+        
+        Args:
+            before: Cursor for pagination (before this ID)
+            after: Cursor for pagination (after this ID)
+            limit: Maximum number of results (default 10)
+        """
+        logger.info(f"Listing Sora-2 video generation jobs with limit: {limit}")
+        response = self.client.videos.list(
+            limit=limit,
+            before=before,
+            after=after
+        )
+        return response.model_dump()
 
     def get_video_generation_video_content(self, generation_id, file_name, target_folder='videos'):
         """
@@ -162,24 +125,42 @@ class Sora:
         Returns:
             str: The path to the downloaded file.
         """
-        url = f"{self.base_url}/generations/{generation_id}/content/video?api-version={self.api_version}"
-
         # Create directory if it doesn't exist
         os.makedirs(target_folder, exist_ok=True)
 
         file_path = os.path.join(target_folder, file_name)
 
-        logger.info(
-            f"Downloading video content for generation {generation_id} to {file_path}")
+        logger.info(f"Downloading Sora-2 video content for generation {generation_id} to {file_path}")
 
-        # Use the same headers as in the notebook - important!
-        response = requests.get(url, headers=self.headers, stream=True)
-        response.raise_for_status()
-
+        # Download video content using OpenAI SDK
+        content = self.client.videos.download_content(generation_id, variant="video")
+        
         with open(file_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:  # Filter out keep-alive chunks
-                    f.write(chunk)
+            f.write(content)
 
         logger.info(f"Successfully downloaded video to {file_path}")
         return file_path
+    
+    def create_remix_video_job(self, remix_video_id, prompt, seconds, size, n_variants=1):
+        """
+        Create a remix video generation job based on an existing video.
+        
+        Args:
+            remix_video_id: ID of the video to remix
+            prompt: Text prompt describing the desired changes
+            seconds: Duration in seconds (4, 8, or 12)
+            size: Video resolution ("720x1280", "1280x720", "1024x1792", "1792x1024")
+            n_variants: Number of video variants to generate (default 1)
+        """
+        logger.info(f"Creating Sora-2 remix job for video {remix_video_id} with prompt: {prompt[:50]}...")
+        
+        response = self.client.videos.create(
+            model=self.deployment_name,
+            prompt=prompt,
+            seconds=seconds,
+            size=size,
+            n=n_variants,
+            remix_video_id=remix_video_id
+        )
+        
+        return response.model_dump()

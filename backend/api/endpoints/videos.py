@@ -38,6 +38,8 @@ from backend.models.videos import (
     VideoGenerationWithAnalysisResponse,
     VideoPromptEnhancementRequest,
     VideoPromptEnhancementResponse,
+    VideoRemixRequest,
+    VideoRemixResponse,
 )
 from backend.core.cosmos_client import CosmosDBService
 
@@ -87,17 +89,16 @@ router = APIRouter()
 async def create_video_generation_job(
     prompt: str = Form(...),
     n_variants: int = Form(1),
-    n_seconds: int = Form(10),
-    height: int = Form(1080),
-    width: int = Form(1920),
+    seconds: int = Form(10),
+    size: str = Form("1280x720"),
     folder_path: str = Form(""),
     analyze_video: bool = Form(False),
-    # NEW: Optional image files
-    images: Optional[List[UploadFile]] = File(None)
+    # Optional single input reference image for Sora-2
+    input_reference: Optional[UploadFile] = File(None)
 ):
     """
-    Enhanced to support both text-only and image+text video generation.
-    Follows exact same workflow as existing video generation.
+    Create video generation job with Sora-2.
+    Supports optional single input reference image.
     """
     try:
         # Ensure Sora client is available
@@ -107,54 +108,49 @@ async def create_video_generation_job(
                 detail="Video generation service is currently unavailable. Please check your environment configuration.",
             )
 
-        # Process images if provided
-        processed_images = []
-        image_filenames = []
+        # Process input reference image if provided
+        input_reference_path = None
         
-        if images:
-            for idx, image_file in enumerate(images):
-                # Read image content
-                image_content = await image_file.read()
+        if input_reference:
+            # Read image content
+            image_content = await input_reference.read()
 
-                # Validate file size (25MB limit)
-                if len(image_content) > 25 * 1024 * 1024:
-                    raise HTTPException(400, f"Image {idx+1} exceeds 25MB limit")
+            # Validate file size (25MB limit)
+            if len(image_content) > 25 * 1024 * 1024:
+                raise HTTPException(400, "Input reference image exceeds 25MB limit")
 
-                # Validate file type
-                if not image_file.content_type or not image_file.content_type.startswith('image/'):
-                    raise HTTPException(400, f"File {idx+1} is not a valid image")
+            # Validate file type
+            if not input_reference.content_type or not input_reference.content_type.startswith('image/'):
+                raise HTTPException(400, "Input reference is not a valid image")
 
-                processed_images.append(image_content)
-                image_filenames.append(image_file.filename or f"image_{idx+1}.jpg")
+            # Save temporarily and get path for Sora-2 API
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+                temp_file.write(image_content)
+                input_reference_path = temp_file.name
         
         # Create job using appropriate method
-        if processed_images:
-            # Use image+text method
+        if input_reference_path:
+            # Use input reference method for Sora-2
             job = sora_client.create_video_generation_job_with_images(
                 prompt=prompt,
-                images=processed_images,
-                image_filenames=image_filenames,
-                n_seconds=n_seconds,
-                height=height,
-                width=width,
+                image_path=input_reference_path,
+                seconds=seconds,
+                size=size,
                 n_variants=n_variants
             )
         else:
-            # Use existing text-only method
+            # Use text-only method
             job = sora_client.create_video_generation_job(
                 prompt=prompt,
-                n_seconds=n_seconds,
-                height=height,
-                width=width,
+                seconds=seconds,
+                size=size,
                 n_variants=n_variants
             )
         
-        # Create response with enhanced metadata
+        # Create response with metadata
         response_data = {
             **job,
-            # Add metadata about images
-            "has_source_images": bool(processed_images),
-            "image_count": len(processed_images) if processed_images else 0,
             "folder_path": folder_path,
             "analyze_video": analyze_video
         }
@@ -245,17 +241,16 @@ async def create_video_generation_with_analysis_upload(
     # Unified form-based endpoint to support optional image uploads
     prompt: str = Form(...),
     n_variants: int = Form(1),
-    n_seconds: int = Form(10),
-    height: int = Form(720),
-    width: int = Form(1280),
+    seconds: int = Form(10),
+    size: str = Form("1280x720"),
     analyze_video: bool = Form(True),
     folder_path: str = Form(""),
     metadata: Optional[str] = Form(None),
-    images: Optional[List[UploadFile]] = File(None),
+    input_reference: Optional[UploadFile] = File(None),
     cosmos_service: Optional[CosmosDBService] = Depends(get_cosmos_service),
 ):
     """
-    Unified endpoint: create a video generation job (with or without source images),
+    Unified endpoint for Sora-2: create a video generation job (with optional input reference),
     wait for completion, optionally analyze, upload to gallery, and create metadata records.
     """
     import tempfile
@@ -281,36 +276,34 @@ async def create_video_generation_with_analysis_upload(
         # Prefer explicit folder_path; fallback to metadata.folder
         selected_folder = folder_path or (metadata_dict.get("folder") if metadata_dict else "")
 
-        # Prepare optional images
-        processed_images: List[bytes] = []
-        image_filenames: List[str] = []
-        if images:
-            for idx, image_file in enumerate(images):
-                content = await image_file.read()
-                if len(content) > 25 * 1024 * 1024:
-                    raise HTTPException(400, f"Image {idx+1} exceeds 25MB limit")
-                if not image_file.content_type or not image_file.content_type.startswith("image/"):
-                    raise HTTPException(400, f"File {idx+1} is not a valid image")
-                processed_images.append(content)
-                image_filenames.append(image_file.filename or f"image_{idx+1}.jpg")
+        # Prepare optional input reference image for Sora-2
+        input_reference_path = None
+        if input_reference:
+            content = await input_reference.read()
+            if len(content) > 25 * 1024 * 1024:
+                raise HTTPException(400, "Input reference image exceeds 25MB limit")
+            if not input_reference.content_type or not input_reference.content_type.startswith("image/"):
+                raise HTTPException(400, "Input reference is not a valid image")
+            
+            # Save to temp file for Sora-2 API
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
+                temp_img.write(content)
+                input_reference_path = temp_img.name
 
-        # Create job with or without images
-        if processed_images:
+        # Create job with or without input reference
+        if input_reference_path:
             job = sora_client.create_video_generation_job_with_images(
                 prompt=prompt,
-                images=processed_images,
-                image_filenames=image_filenames,
-                n_seconds=n_seconds,
-                height=height,
-                width=width,
+                image_path=input_reference_path,
+                seconds=seconds,
+                size=size,
                 n_variants=n_variants,
             )
         else:
             job = sora_client.create_video_generation_job(
                 prompt=prompt,
-                n_seconds=n_seconds,
-                height=height,
-                width=width,
+                seconds=seconds,
+                size=size,
                 n_variants=n_variants,
             )
 
@@ -427,12 +420,12 @@ async def create_video_generation_with_analysis_upload(
                                 "content_type": "video/mp4",
                                 "folder_path": normalized_folder,
                                 "prompt": prompt,
-                                "model": "sora",
+                                "model": "sora-2",
                                 "generation_id": generation_id,
                                 "analysis": analysis_data,
                                 "has_analysis": True,
-                                "duration": n_seconds,
-                                "resolution": f"{width}x{height}",
+                                "duration": seconds,
+                                "resolution": size,
                                 "custom_metadata": {
                                     "n_variants": str(n_variants),
                                     "analyzed": "true",
@@ -497,15 +490,25 @@ def create_video_generation_with_analysis(
                 detail="LLM service is currently unavailable for video analysis.",
             )
 
-        # Step 1: Create the video generation job
-        logger.info(f"Creating video generation job with prompt: {req.prompt}")
-        job = sora_client.create_video_generation_job(
-            prompt=req.prompt,
-            n_seconds=req.n_seconds,
-            height=req.height,
-            width=req.width,
-            n_variants=req.n_variants,
-        )
+        # Step 1: Create the video generation job with Sora-2
+        logger.info(f"Creating Sora-2 video generation job with prompt: {req.prompt}")
+        
+        # Handle input reference if provided
+        if req.input_reference:
+            job = sora_client.create_video_generation_job_with_images(
+                prompt=req.prompt,
+                image_path=req.input_reference,
+                seconds=req.seconds,
+                size=req.size,
+                n_variants=req.n_variants,
+            )
+        else:
+            job = sora_client.create_video_generation_job(
+                prompt=req.prompt,
+                seconds=req.seconds,
+                size=req.size,
+                n_variants=req.n_variants,
+            )
 
         job_response = VideoGenerationJobResponse(**job)
         logger.info(f"Created job {job_response.id}, waiting for completion...")
@@ -725,7 +728,7 @@ def create_video_generation_with_analysis(
                                         if folder_path and folder_path != "root"
                                         else "",
                                         "prompt": req.prompt,
-                                        "model": "sora",
+                                        "model": "sora-2",
                                         "generation_id": generation_id,
                                         "analysis": {
                                             "summary": analysis_result.summary,
@@ -735,8 +738,8 @@ def create_video_generation_with_analysis(
                                             "analyzed_at": datetime.now().isoformat(),
                                         },
                                         "has_analysis": True,
-                                        "duration": req.n_seconds,
-                                        "resolution": f"{req.width}x{req.height}",
+                                        "duration": req.seconds,
+                                        "resolution": req.size,
                                         "custom_metadata": {
                                             "n_variants": str(req.n_variants),
                                             "analyzed": "true",
@@ -896,6 +899,8 @@ def analyze_video(req: VideoAnalyzeRequest):
         logger.info(f"Downloading video '{blob_name}' from Azure Blob Storage using managed identity")
 
         # Download video content using managed identity
+        from backend.core.azure_storage import AzureBlobStorageService
+        azure_storage_service = AzureBlobStorageService()
         video_content, content_type = azure_storage_service.get_asset_content(blob_name, 'videos')
         
         if video_content is None:
@@ -1044,3 +1049,47 @@ def generate_video_filename(req: VideoFilenameGenerateRequest):
     except Exception as e:
         logger.error(f"Error generating filename: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/remix", response_model=VideoRemixResponse)
+async def create_remix_video_job(req: VideoRemixRequest):
+    """
+    Create a remix video generation job based on an existing video.
+    Uses Sora-2's remix feature to apply targeted edits to a video.
+    
+    Args:
+        req: VideoRemixRequest containing remix_video_id, prompt, seconds, size, n_variants
+    
+    Returns:
+        VideoRemixResponse with job details and original video ID
+    """
+    try:
+        # Ensure Sora client is available
+        if sora_client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Video generation service is currently unavailable. Please check your environment configuration.",
+            )
+
+        logger.info(f"Creating remix job for video {req.remix_video_id} with prompt: {req.prompt}")
+        
+        # Create remix job using Sora-2 remix feature
+        job = sora_client.create_remix_video_job(
+            remix_video_id=req.remix_video_id,
+            prompt=req.prompt,
+            seconds=req.seconds,
+            size=req.size,
+            n_variants=req.n_variants
+        )
+        
+        job_response = VideoGenerationJobResponse(**job)
+        
+        return VideoRemixResponse(
+            job=job_response,
+            original_video_id=req.remix_video_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Error creating remix job: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+

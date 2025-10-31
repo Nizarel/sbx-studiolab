@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { cn } from "@/utils/utils";
-import { PlayCircle, MoreVertical, Trash, FolderUp, Download, Loader2 } from "lucide-react";
+import { PlayCircle, MoreVertical, Trash, FolderUp, Download, Loader2, Wand2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +18,7 @@ import { MediaType, deleteGalleryAsset, fetchFolders, moveAsset } from "@/servic
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { VideoRemixDialog } from "@/components/VideoRemixDialog";
 
 interface VideoCardProps {
   src: string;
@@ -29,6 +30,10 @@ interface VideoCardProps {
   tags?: string[];
   id?: string;
   blobName?: string;
+  generationId?: string;
+  prompt?: string;
+  duration?: number;
+  resolution?: string;
   onDelete?: () => void;
   onMove?: () => void;
   onClick?: () => void;
@@ -42,6 +47,10 @@ export function VideoCard({
   className,
   tags,
   blobName,
+  generationId,
+  prompt,
+  duration,
+  resolution,
   onDelete,
   onClick,
   autoPlay = true,
@@ -62,6 +71,7 @@ export function VideoCard({
   const [isMoving, setIsMoving] = useState(false);
   const [folders, setFolders] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
+  const [remixDialogOpen, setRemixDialogOpen] = useState(false);
 
   // Debounced play function to prevent rapid play/pause calls
   const debouncedPlay = () => {
@@ -431,11 +441,24 @@ export function VideoCard({
   };
 
   return (
-    <div 
-      ref={cardRef}
-      className="relative w-full mb-0"
-    >
-      <Card 
+    <>
+      {/* Remix Dialog */}
+      {generationId && (
+        <VideoRemixDialog
+          open={remixDialogOpen}
+          onOpenChange={setRemixDialogOpen}
+          videoId={generationId}
+          originalPrompt={prompt}
+          currentSize={resolution}
+          currentDuration={duration}
+        />
+      )}
+      
+      <div 
+        ref={cardRef}
+        className="relative w-full mb-0"
+      >
+        <Card 
         className={cn(
           "overflow-hidden border rounded-xl group hover:shadow-md transition-all duration-200 h-full p-0 w-full bg-card",
           className,
@@ -451,6 +474,19 @@ export function VideoCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {generationId && (
+                <>
+                  <DropdownMenuItem onClick={(e) => {
+                    e.stopPropagation();
+                    setRemixDialogOpen(true);
+                  }}>
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    Remix video
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger disabled={isMoving || loadingFolders}>
                   {isMoving ? (
@@ -610,5 +646,6 @@ export function VideoCard({
         </div>
       </Card>
     </div>
+    </>
   );
 } 
