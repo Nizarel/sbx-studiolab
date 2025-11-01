@@ -48,7 +48,9 @@ class Sora:
             size=size
         )
         
-        return response.model_dump()
+        response_dict = response.model_dump()
+        logger.info(f"Created Sora-2 job {response_dict.get('id')} with initial status: {response_dict.get('status')}")
+        return response_dict
 
     def create_video_generation_job_with_images(self, prompt, image_path, seconds, size, n_variants=1):
         """
@@ -83,7 +85,9 @@ class Sora:
         """
         logger.info(f"Getting Sora-2 video generation job: {job_id}")
         response = self.client.videos.retrieve(job_id)
-        return response.model_dump()
+        response_dict = response.model_dump()
+        logger.info(f"Sora-2 job {job_id} status: {response_dict.get('status')}, generations: {len(response_dict.get('generations') or [])}")
+        return response_dict
 
     def delete_video_generation_job(self, job_id):
         """
@@ -131,10 +135,12 @@ class Sora:
         logger.info(f"Downloading Sora-2 video content for generation {generation_id} to {file_path}")
 
         # Download video content using OpenAI SDK
-        content = self.client.videos.download_content(generation_id, variant="video")
+        # The response is a streaming object, we need to read it
+        response = self.client.videos.download_content(generation_id, variant="video")
         
         with open(file_path, 'wb') as f:
-            f.write(content)
+            # Read the streaming response content
+            f.write(response.read())
 
         logger.info(f"Successfully downloaded video to {file_path}")
         return file_path

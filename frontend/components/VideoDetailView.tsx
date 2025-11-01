@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   X, ChevronLeft, ChevronRight, Play, Pause, 
-  Download, Trash2, FolderUp, Eye, Loader2, Maximize, Minimize, Wand2 
+  Download, Trash2, FolderUp, Eye, Loader2, Maximize, Minimize, Wand2, Volume2, VolumeX 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -710,7 +710,7 @@ export function VideoDetailView({
                     controls={false}
                     preload="auto"
                     playsInline
-                    muted={true}
+                    muted={isMuted}
                     onLoadedData={() => {
                       setIsLoading(false);
                       setIsError(false);
@@ -780,6 +780,19 @@ export function VideoDetailView({
                     
                     {/* Right controls */}
                     <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={toggleMute}
+                        className="h-8 w-8 bg-black/50 text-white hover:bg-black/70"
+                        title={isMuted ? "Unmute (M)" : "Mute (M)"}
+                      >
+                        {isMuted ? (
+                          <VolumeX className="h-4 w-4" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                      </Button>
                       <Button 
                         variant="ghost" 
                         size="icon" 

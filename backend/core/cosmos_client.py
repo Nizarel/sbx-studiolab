@@ -194,7 +194,7 @@ class CosmosDBService:
         self, asset_id: str, media_type: str, updates: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Update metadata for an existing asset
+        Update metadata for an existing asset (or create if it doesn't exist - upsert)
 
         Args:
             asset_id: Unique identifier for the asset
@@ -207,8 +207,23 @@ class CosmosDBService:
         try:
             # Get existing item
             existing_item = self.get_asset_metadata(asset_id, media_type)
+            
             if not existing_item:
-                raise ValueError(f"Asset metadata not found: {asset_id}")
+                # If metadata doesn't exist, create it with the updates
+                logger.info(f"Asset metadata not found: {asset_id}, creating new metadata")
+                new_metadata = {
+                    "id": asset_id,
+                    "media_type": media_type,
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+                # Add all updates to the new metadata
+                new_metadata.update(updates)
+                
+                # Upsert the item (create if not exists, update if exists)
+                updated_item = self.container.upsert_item(body=new_metadata)
+                logger.info(f"Created metadata for asset: {asset_id}")
+                return updated_item
 
             # Update fields
             existing_item.update(updates)

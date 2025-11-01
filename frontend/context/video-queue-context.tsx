@@ -128,15 +128,22 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
           };
           
           // Update status based on job status
-          if (updatedJob.status === "succeeded") {
+          // Note: Sora-2 uses "completed" not "succeeded"
+          if (updatedJob.status === "completed") {
+            // For Sora-2, when status is "completed", the video is ready to download
+            // We use the job ID itself as the video ID for download
             updatedItems[i].status = "completed";
             updatedItems[i].progress = 100;
             hasUpdates = true;
 
-            // Handle uploading multiple generations if they exist
-            if (updatedJob.generations && updatedJob.generations.length > 0) {
-              // Handle each generation
-              const uploadPromises = updatedJob.generations
+            // Create a pseudo-generation to trigger the upload process
+            const pseudoGenerations = [{
+              id: updatedJob.id, // Use job ID as the video ID for download
+              prompt: item.prompt
+            }];
+
+            // Handle uploading the completed video
+            const uploadPromises = pseudoGenerations
                 .filter(generation => !uploadedGenerations.has(generation.id)) // Only process generations not already uploaded
                 .map(async (generation: { id: string; prompt?: string }, index: number) => {
                   // Mark this generation as being processed to prevent duplicate uploads
@@ -238,27 +245,24 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
                 console.log(`All generations for job ${updatedJob.id} were already uploaded`);
               }
               
-              // Mark this item with a special "uploaded" flag so the UI knows everything is ready
-              updatedItems[i].uploadComplete = true;
-            } else {
-              console.log(`Job ${updatedJob.id} completed but no generations were found`);
-              toast.info(`Job completed but no videos were generated.`);
-              updatedItems[i].uploadComplete = true;
-            }
-
+              // Remove completed job from queue immediately after successful upload
+              console.log(`Removing completed job ${updatedJob.id} from queue`);
+              updatedItems.splice(i, 1);
+              i--; // Adjust index after removal
+              hasUpdates = true;
           } else if (updatedJob.status === "failed") {
             updatedItems[i].status = "failed";
             hasUpdates = true;
-          } else if (updatedJob.status === "running" || updatedJob.status === "processing") {
+          } else if (updatedJob.status === "in_progress" || updatedJob.status === "queued") {
             if (item.status !== "processing") {
               updatedItems[i].status = "processing";
               hasUpdates = true;
             }
             
-            // Estimate progress based on time elapsed (assuming max 2 minutes processing time)
+            // Estimate progress based on time elapsed (Sora-2 takes 10-15 mins)
             if (updatedJob.created_at) {
               const elapsedSeconds = (Date.now() / 1000) - updatedJob.created_at;
-              const estimatedProgress = Math.min(95, (elapsedSeconds / 120) * 100);
+              const estimatedProgress = Math.min(95, (elapsedSeconds / 720) * 100);
               
               if (Math.abs((item.progress || 0) - estimatedProgress) > 5) {
                 updatedItems[i].progress = estimatedProgress;
