@@ -100,6 +100,30 @@ class Sora:
         response = self.client.videos.delete(job_id)
         return response.deleted
 
+    def remix_video(self, video_id, prompt):
+        """
+        Create a remix of an existing video with modifications.
+        Reuses the original video's structure and continuity while applying changes.
+        
+        Args:
+            video_id: The ID of the completed video to remix
+            prompt: New prompt describing the changes to make
+        
+        Returns:
+            Dict containing the new video generation job details
+        """
+        logger.info(f"Creating remix of video {video_id} with prompt: {prompt[:50]}...")
+        
+        # Use the remix endpoint: POST /videos/{video_id}/remix
+        response = self.client.post(
+            f"/videos/{video_id}/remix",
+            body={"prompt": prompt},
+            cast_to=object
+        )
+        
+        logger.info(f"Created remix job from video {video_id}")
+        return response
+
     def list_video_generation_jobs(self, before=None, after=None, limit=10):
         """
         List video generation jobs.

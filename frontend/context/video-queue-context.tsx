@@ -70,6 +70,8 @@ export interface VideoSettings {
   analyzeVideo?: boolean; // Add video analysis setting
   // NEW: Optional source images for Image+Text to Video
   sourceImages?: File[];
+  // NEW: Optional remix video ID
+  remixVideoId?: string;
 }
 
 interface VideoQueueContextType {
@@ -407,6 +409,7 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
               sourceImages: settings.sourceImages,
               folder_path: settings.folder,
               analyze_video: settings.analyzeVideo,
+              remix_video_id: settings.remixVideoId, // Add remix support
             });
             
             // Update the queue item with the real job ID and data
@@ -428,6 +431,7 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
             // Pass images and folder for compatibility
             sourceImages: settings.sourceImages,
             folder_path: settings.folder,
+            remix_video_id: settings.remixVideoId, // Add remix support
           });
           
           // Update the queue item with the real job ID and data

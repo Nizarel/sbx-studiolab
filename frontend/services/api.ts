@@ -301,6 +301,11 @@ export async function createVideoGenerationJob(request: VideoGenerationRequest):
     formData.append('analyze_video', String(analyze));
   }
 
+  // Append remix video ID if provided
+  if (request.remix_video_id) {
+    formData.append('remix_video_id', request.remix_video_id);
+  }
+
   // Append single input reference image if provided (Sora-2)
   if (request.input_reference) {
     formData.append('input_reference', request.input_reference, request.input_reference.name);

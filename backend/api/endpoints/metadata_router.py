@@ -102,10 +102,16 @@ async def update_asset_metadata(
             asset_id, media_type, updates
         )
 
+        # Filter out Cosmos DB system fields (those starting with _)
+        filtered_metadata = {
+            k: v for k, v in updated_metadata.items()
+            if not k.startswith('_')
+        }
+
         return AssetMetadataResponse(
             success=True,
             message="Asset metadata updated successfully",
-            metadata=AssetMetadata(**updated_metadata),
+            metadata=AssetMetadata(**filtered_metadata),
         )
     except HTTPException:
         raise

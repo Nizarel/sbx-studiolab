@@ -2,24 +2,25 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
-import { Loader2, RefreshCw, Clock, Video, VideoOff, FolderIcon, FileVideo } from "lucide-react";
+import { Loader2, RefreshCw, VideoOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDistanceToNow } from "date-fns";
 import { useSearchParams } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { fetchVideos, VideoMetadata } from "@/utils/gallery-utils";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoOverlay } from "@/components/VideoOverlay";
-import { useVideoQueue, registerGalleryRefreshCallback, unregisterGalleryRefreshCallback } from "@/context/video-queue-context";
+import { useVideoQueue, registerGalleryRefreshCallback, unregisterGalleryRefreshCallback, VideoQueueItem } from "@/context/video-queue-context";
 import { protectImagePrompt, fetchFolders, MediaType } from "@/services/api";
 import { useImageSettings } from "@/context/image-settings-context";
 import { SlideTransition } from "@/components/ui/page-transition";
 import { VideoDetailView } from "@/components/VideoDetailView";
+import { VideoQueueSidebar } from "@/components/VideoQueueSidebar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // Separate component that uses useSearchParams
 function NewVideoPageContent() {
@@ -44,6 +45,8 @@ function NewVideoPageContent() {
   const [folders, setFolders] = useState<string[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string>(folderParam || "root");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [remixVideoId, setRemixVideoId] = useState<string>("");
+  const [fullscreenVideo, setFullscreenVideo] = useState<VideoMetadata | null>(null);
   
   // Get video generation context
   const { addToQueue, queueItems } = useVideoQueue();
@@ -189,15 +192,6 @@ function NewVideoPageContent() {
   }, [loading, isRefreshing, loadVideos]);
 
   // Toggle auto-refresh
-  const toggleAutoRefresh = () => {
-    setAutoRefresh(prev => !prev);
-  };
-
-  // Toggle auto-play
-  const toggleAutoPlay = () => {
-    setAutoPlay(prev => !prev);
-  };
-
   // Handle auto refresh toggle
   useEffect(() => {
     if (autoRefresh) {
@@ -321,22 +315,6 @@ function NewVideoPageContent() {
   };
 
   // Generate skeleton placeholders for loading state
-  const renderSkeletons = (count: number) => {
-    return Array.from({ length: count }).map((_, index) => (
-      <div key={`skeleton-${index}`} className="mb-6">
-        <Card className="overflow-hidden bg-black p-0 border-0 rounded-xl">
-          <AspectRatio ratio={16/9} className="bg-muted">
-            <Skeleton className="h-full w-full rounded-none" />
-          </AspectRatio>
-          <div className="p-4 space-y-2">
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-3 w-full" />
-          </div>
-        </Card>
-      </div>
-    ));
-  };
-
   // Function to generate sample tags for videos
   const generateTagsForVideo = (video: VideoMetadata): string[] => {
     // First, check if we have real analysis tags
@@ -366,56 +344,6 @@ function NewVideoPageContent() {
   };
 
   // Group videos into columns for masonry layout
-  const groupVideosIntoColumns = (numCols = 3) => {
-    const columns: VideoMetadata[][] = Array.from({ length: numCols }, () => []);
-    
-    // Distribute videos across columns
-    videos.forEach((video, index) => {
-      const columnIndex = index % numCols;
-      columns[columnIndex].push(video);
-    });
-    
-    return columns;
-  };
-
-  const columns = groupVideosIntoColumns(3);
-
-  // Get folder name for display
-  const folderName = folderParam ? folderParam.split('/').pop() || folderParam : "All Videos";
-
-  // Check if there are any active generations
-  const activeGenerationJobs = queueItems.filter(
-    item => item.status === "pending" || item.status === "processing"
-  );
-  // Also track uploads in progress (completed but not yet uploaded)
-  const uploadsInProgress = queueItems.filter(
-    item => item.status === "completed" && !item.uploadComplete && jobsInProgress[item.id]
-  );
-  const hasActiveGenerations = activeGenerationJobs.length > 0 || uploadsInProgress.length > 0;
-
-  // Calculate estimated completion time for ongoing jobs
-  const getEstimatedTimeRemaining = () => {
-    if (!hasActiveGenerations) return null;
-    
-    // Find the oldest active job
-    const oldestJob = activeGenerationJobs.reduce((oldest, current) => 
-      oldest.createdAt < current.createdAt ? oldest : current
-    );
-    
-    // Get progress or estimate it
-    const progress = oldestJob.progress || 50;
-    
-    // Rough estimation based on progress (assuming 2 minutes total generation time)
-    const totalEstimatedTime = 120; // seconds
-    const elapsedTime = (progress / 100) * totalEstimatedTime;
-    const remainingTime = totalEstimatedTime - elapsedTime;
-    
-    if (remainingTime <= 15) return "less than 15 seconds";
-    if (remainingTime <= 30) return "less than 30 seconds";
-    if (remainingTime <= 60) return "less than a minute";
-    return "about 1-2 minutes";
-  };
-
   // When videos are saved to gallery
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleVideosSaved = () => {
@@ -499,11 +427,21 @@ function NewVideoPageContent() {
             analyzeVideo: settings.analyzeVideo, // Pass the analysis setting
             folder: settings.folder, // Pass the folder setting
             // NEW: Pass source images through to the queue context
-            sourceImages: settings.sourceImages
+            sourceImages: settings.sourceImages,
+            // NEW: Pass remix video ID if set
+            remixVideoId: remixVideoId || undefined
           };
           
           // Add to queue - this will create the job in the backend
           const jobId = await addToQueue(generationPrompt, videoSettings);
+          
+          // Clear remix ID after successful generation
+          if (remixVideoId) {
+            setRemixVideoId("");
+            toast.success("Video remix started!", {
+              description: `Job ID: ${jobId}`
+            });
+          }
           
           // Track this job to handle its completion properly
           setJobsInProgress(prev => ({
@@ -552,11 +490,42 @@ function NewVideoPageContent() {
     }
   };
 
-  const [fullscreenVideo, setFullscreenVideo] = useState<VideoMetadata | null>(null);
-  
   // Function to handle video click - Opens the full-screen modal
   const handleVideoClick = (video: VideoMetadata) => {
     setFullscreenVideo(video);
+  };
+
+  // Handle download from sidebar
+  const handleSidebarDownload = (item: VideoQueueItem) => {
+    if (item.job?.id) {
+      const videoId = item.job.id;
+      const fileName = `${item.prompt.substring(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${videoId}.mp4`;
+      const downloadUrl = `/api/v1/videos/generations/${videoId}/content?file_name=${encodeURIComponent(fileName)}`;
+      
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success("Download started");
+    }
+  };
+
+  // Handle remix from sidebar
+  const handleSidebarRemix = (item: VideoQueueItem) => {
+    if (item.job?.id) {
+      setRemixVideoId(item.job.id);
+      toast.success("Video ID set for remix", {
+        description: "You can now modify the prompt and generate a remix"
+      });
+    }
+  };
+
+  // Handle refresh from sidebar
+  const handleSidebarRefresh = () => {
+    toast.info("Refreshing status...");
   };
 
   // Function to handle video deletion from the detail view
@@ -600,200 +569,130 @@ function NewVideoPageContent() {
 
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <PageHeader title={folderParam ? "Album" : "All Videos"} />
-      
-      <div className="flex-1 w-full h-full overflow-y-auto gallery-container">
-        <div className="w-full mx-auto px-10 py-6 pb-40">
-          {/* Toolbar */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              {folderParam && (
-                <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
-                  <FolderIcon className="h-3.5 w-3.5 mr-1" />
-                  {folderName}
-                </Badge>
-              )}
-              <span className="text-xs text-muted-foreground">
-                {lastRefreshedText}
-              </span>
-              
-              {/* Add active generation indicator */}
-              {hasActiveGenerations && (
-                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary animate-pulse">
-                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                  <span className="text-xs">
-                    {uploadsInProgress.length > 0 ? (
-                      `Uploading ${uploadsInProgress.length} video${uploadsInProgress.length > 1 ? 's' : ''} to gallery...`
-                    ) : (
-                      `Generating ${activeGenerationJobs.length > 1 ? `${activeGenerationJobs.length} videos` : 'video'} 
-                      ${getEstimatedTimeRemaining() ? `(${getEstimatedTimeRemaining()} remaining)` : ''}`
-                    )}
-                  </span>
-                </Badge>
-              )}
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant={autoPlay ? "outline" : "ghost"}
-                      className={`relative h-8 w-8 ${autoPlay ? 'border-primary text-primary' : 'text-muted-foreground'}`}
-                      onClick={toggleAutoPlay}
-                    >
-                      {autoPlay ? (
-                        <Video className="h-4 w-4" />
-                      ) : (
-                        <VideoOff className="h-4 w-4" />
-                      )}
-                      <span className="sr-only">
-                        {autoPlay ? 'Disable auto-play' : 'Enable auto-play'}
-                      </span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">
-                    {autoPlay ? 'Videos auto-play (on)' : 'Videos play on hover (off)'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+    <div className="flex h-full w-full">
+      {/* Left Sidebar - Video Queue */}
+      <VideoQueueSidebar 
+        onDownload={handleSidebarDownload}
+        onRemix={handleSidebarRemix}
+        onRefresh={handleSidebarRefresh}
+      />
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant={autoRefresh ? "outline" : "ghost"}
-                      className={`relative h-8 w-8 ${autoRefresh ? 'border-primary text-primary' : 'text-muted-foreground'}`}
-                      onClick={toggleAutoRefresh}
-                    >
-                      <Clock className="h-4 w-4" />
-                      {autoRefresh && (
-                        <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
-                      )}
-                      <span className="sr-only">
-                        {autoRefresh ? 'Disable auto-refresh' : 'Enable auto-refresh'}
-                      </span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">
-                    {autoRefresh ? 'Auto-refresh every 30s (on)' : 'Auto-refresh every 30s (off)'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <Button 
-                variant="outline" 
-                size="icon" 
-                onClick={() => loadVideos(true)}
-                disabled={loading || isRefreshing}
-              >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span className="sr-only">Refresh gallery</span>
-              </Button>
-            </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Header */}
+        <div className="px-8 py-6 border-b border-border/50">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl font-bold mb-2">Create Your Story</h1>
+            <p className="text-muted-foreground">
+              Craft engaging video content with AI-powered video generation. Bring your creative vision to life with custom prompts, images, and styles.
+            </p>
           </div>
-          
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {renderSkeletons(12)}
-            </div>
-          ) : videos.length > 0 ? (
-            <div>
-              {/* Masonry grid using CSS columns */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {columns.map((column, columnIndex) => (
-                  <div key={`column-${columnIndex}`} className="flex flex-col space-y-6">
-                    {column.map((video, videoIndex) => {
-                      const sampleTags = generateTagsForVideo(video);
-                      
-                      // Determine if this should be a large video
-                      // For example, every 5th video in the overall sequence
-                      const isLarge = (videoIndex * 3 + columnIndex) % 5 === 0;
-                      
-                      return (
-                        <div key={video.name} className="w-full">
-                          <VideoCard
-                            src={video.src}
-                            title={video.title}
-                            description={video.description}
-                            size={isLarge ? "large" : video.size}
-                            className="w-full"
-                            tags={sampleTags}
-                            id={video.id}
-                            blobName={video.name}
-                            onDelete={() => handleVideoDeleted(video.name)}
-                            onClick={() => handleVideoClick(video)}
-                            autoPlay={autoPlay}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-              
-              {/* Load more button */}
-              {hasMore && (
-                <div className="mt-8 flex justify-center">
-                  <button
-                    onClick={loadMoreVideos}
-                    disabled={isLoadingMore}
-                    className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md flex items-center gap-2"
-                  >
-                    {isLoadingMore ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      'Load More Videos'
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-[calc(100vh-20rem)] py-20 text-muted-foreground">
-              <FileVideo className="h-16 w-16 mb-4 opacity-20" />
-              {folderParam ? (
-                <>
-                  <p className="text-xl">This album is empty</p>
-                  <p className="text-sm mt-2">No videos found in album &quot;{folderName}&quot;</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl">No videos found in the gallery</p>
-                  <p className="text-sm mt-2">Create new videos to get started</p>
-                </>
-              )}
-              <Button 
-                onClick={() => loadVideos(true)} 
-                variant="outline" 
-                className="mt-6"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Gallery
-              </Button>
-            </div>
-          )}
         </div>
 
-        {/* Video Creation Container - sticky positioned at the bottom */}
-        <div className="sticky bottom-0 w-full">
-          <VideoOverlay 
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            folders={folders}
-            selectedFolder={selectedFolder}
-            onFolderCreated={handleFolderCreated}
-          />
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-8 py-8">
+            {/* Remix from Video ID Input */}
+            <div className="mb-6">
+              <Label htmlFor="remix-video-id" className="text-sm font-medium mb-2 block text-muted-foreground uppercase tracking-wider">
+                Remix from Video ID
+              </Label>
+              <Input
+                id="remix-video-id"
+                type="text"
+                placeholder="video_..."
+                value={remixVideoId}
+                onChange={(e) => setRemixVideoId(e.target.value)}
+                className="max-w-md"
+              />
+            </div>
+
+            {/* Video Generation Form */}
+            <div className="mb-8">
+              <VideoOverlay
+                folders={folders}
+                selectedFolder={selectedFolder}
+                onGenerate={handleGenerate}
+                onFolderCreated={handleFolderCreated}
+                isGenerating={isGenerating}
+              />
+            </div>
+
+            {/* Generated Videos Gallery - Show below the form */}
+            {videos.length > 0 && (
+              <div className="mt-12">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-semibold">Recent Videos</h2>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{lastRefreshedText}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadVideos(true, false)}
+                      disabled={loading || isRefreshing}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {videos.slice(0, 12).map((video) => (
+                    <VideoCard
+                      key={video.id}
+                      src={video.src}
+                      title={video.title}
+                      description={video.description}
+                      blobName={video.name}
+                      generationId={video.id}
+                      prompt={video.originalItem?.metadata?.prompt}
+                      duration={video.originalItem?.metadata?.duration ? Number(video.originalItem.metadata.duration) : undefined}
+                      resolution={video.originalItem?.metadata?.resolution}
+                      onClick={() => handleVideoClick(video)}
+                      onDelete={() => handleVideoDeleted(video.name)}
+                      tags={generateTagsForVideo(video)}
+                      autoPlay={autoPlay}
+                    />
+                  ))}
+                </div>
+
+                {hasMore && videos.length >= 12 && (
+                  <div className="flex justify-center mt-8">
+                    <Button
+                      variant="outline"
+                      onClick={loadMoreVideos}
+                      disabled={isLoadingMore}
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Load More"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {videos.length === 0 && !loading && (
+              <div className="text-center py-12">
+                <VideoOff className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No videos yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Generate your first video using the form above
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Video Detail View */}
+      {/* Video Detail Modal */}
       <VideoDetailView
         video={fullscreenVideo}
         videos={videos}
@@ -801,8 +700,10 @@ function NewVideoPageContent() {
         onDelete={handleVideoDeletedFromDetail}
         onMove={handleVideoMovedFromDetail}
         onNavigate={(direction, index) => {
-          if (index >= 0 && index < videos.length) {
-            setFullscreenVideo(videos[index]);
+          if (direction === "next" && index < videos.length - 1) {
+            setFullscreenVideo(videos[index + 1]);
+          } else if (direction === "prev" && index > 0) {
+            setFullscreenVideo(videos[index - 1]);
           }
         }}
       />

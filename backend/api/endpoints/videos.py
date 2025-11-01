@@ -93,12 +93,14 @@ async def create_video_generation_job(
     size: str = Form("1280x720"),
     folder_path: str = Form(""),
     analyze_video: bool = Form(False),
+    # Optional remix video ID
+    remix_video_id: Optional[str] = Form(None),
     # Optional single input reference image for Sora-2
     input_reference: Optional[UploadFile] = File(None)
 ):
     """
     Create video generation job with Sora-2.
-    Supports optional single input reference image.
+    Supports optional single input reference image or remix from existing video.
     """
     try:
         # Ensure Sora client is available
@@ -108,10 +110,15 @@ async def create_video_generation_job(
                 detail="Video generation service is currently unavailable. Please check your environment configuration.",
             )
 
+        # Check if this is a remix request
+        if remix_video_id:
+            logger.info(f"Creating remix from video: {remix_video_id}")
+            job = sora_client.remix_video(
+                video_id=remix_video_id,
+                prompt=prompt
+            )
         # Process input reference image if provided
-        input_reference_path = None
-        
-        if input_reference:
+        elif input_reference:
             # Read image content
             image_content = await input_reference.read()
 
