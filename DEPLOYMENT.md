@@ -91,6 +91,15 @@ azd provision
 azd deploy
 ```
 
+## Private Endpoints for Enhanced Security
+
+For deployments requiring private network connectivity (no public internet access to Storage/Cosmos DB), see the **[Private Endpoints Deployment Guide](PRIVATE_ENDPOINTS.md)**.
+
+Private endpoints provide:
+- Complete network isolation for Storage and Cosmos DB
+- Traffic stays within Azure Virtual Network
+- Compliance with policies requiring private-only connectivity
+
 ## Architecture
 
 The deployment creates:
@@ -100,7 +109,9 @@ The deployment creates:
 - **Frontend Container App**: Next.js application (Node.js)
 - **Azure Container Registry**: Private registry for storing Docker images
 - **Azure Storage Account**: For storing generated images and videos
+- **Azure Cosmos DB**: For storing metadata and asset information
 - **Log Analytics Workspace**: For monitoring and logging
+- **Optional: Virtual Network & Private Endpoints**: For private connectivity (see [PRIVATE_ENDPOINTS.md](PRIVATE_ENDPOINTS.md))
 
 ## Environment Variables
 
