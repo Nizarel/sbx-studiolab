@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+import traceback
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -26,10 +27,13 @@ from backend.core.instructions import (
     analyze_video_system_message,
     filename_system_message,
     video_prompt_enhancement_system_message,
+    video_title_system_message,
 )
 from backend.models.videos import (
     VideoFilenameGenerateRequest,
     VideoFilenameGenerateResponse,
+    VideoTitleGenerateRequest,
+    VideoTitleGenerateResponse,
     VideoAnalyzeRequest,
     VideoAnalyzeResponse,
     VideoGenerationJobResponse,
@@ -386,9 +390,14 @@ async def create_video_generation_with_analysis_upload(
                         "feedback": analysis_result.feedback,
                         "analyzed_at": datetime.now().isoformat(),
                     }
+                    
+                    # Generate title from prompt
+                    generated_title = _generate_title_from_prompt(prompt)
+                    
                     upload_metadata = {
                         "generation_id": generation_id,
                         "prompt": prompt,
+                        "title": generated_title,
                         "analysis": analysis_data,
                         "has_analysis": True,
                         "upload_date": datetime.now().isoformat(),
@@ -427,6 +436,7 @@ async def create_video_generation_with_analysis_upload(
                                 "content_type": "video/mp4",
                                 "folder_path": normalized_folder,
                                 "prompt": prompt,
+                                "title": generated_title,
                                 "model": "sora-2",
                                 "generation_id": generation_id,
                                 "analysis": analysis_data,
@@ -783,6 +793,99 @@ def generate_video_filename(req: VideoFilenameGenerateRequest):
 
     except Exception as e:
         logger.error(f"Error generating filename: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _generate_title_from_prompt(prompt: str) -> str:
+    """
+    Helper function to generate a video title from a prompt.
+    Returns the generated title or falls back to prompt substring on error.
+    
+    Args:
+        prompt: The video generation prompt
+    
+    Returns:
+        str: Generated title or fallback
+    """
+    try:
+        if not llm_client or not prompt or not prompt.strip():
+            # Fallback to prompt-based title
+            return prompt.strip()[:50] + ('...' if len(prompt.strip()) > 50 else '')
+        
+        messages = [
+            {"role": "system", "content": video_title_system_message},
+            {"role": "user", "content": prompt},
+        ]
+        response = llm_client.chat.completions.create(
+            messages=messages,
+            model=settings.LLM_DEPLOYMENT,
+            response_format={"type": "json_object"},
+            temperature=0.7,
+        )
+        
+        title = json.loads(response.choices[0].message.content).get("title")
+        
+        if title and title.strip():
+            return title.strip()
+        else:
+            # Fallback to prompt-based title
+            return prompt.strip()[:50] + ('...' if len(prompt.strip()) > 50 else '')
+            
+    except Exception as e:
+        logger.warning(f"Failed to generate title, using prompt: {str(e)}")
+        # Fallback to prompt-based title
+        return prompt.strip()[:50] + ('...' if len(prompt.strip()) > 50 else '')
+
+
+@router.post("/title/generate", response_model=VideoTitleGenerateResponse)
+def generate_video_title(req: VideoTitleGenerateRequest):
+    """
+    Generate an engaging title for a video based on its prompt.
+    Uses GPT-5-nano for fast, creative title generation.
+    
+    Args:
+        prompt: The video generation prompt
+    
+    Returns:
+        title: Generated creative video title
+    """
+    try:
+        # Ensure LLM client is available
+        if llm_client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM service is currently unavailable. Please check your environment configuration.",
+            )
+
+        # Validate prompt
+        if not req.prompt or not req.prompt.strip():
+            raise HTTPException(status_code=400, detail="Prompt must not be empty.")
+
+        # Call the LLM to generate title
+        messages = [
+            {"role": "system", "content": video_title_system_message},
+            {"role": "user", "content": req.prompt},
+        ]
+        response = llm_client.chat.completions.create(
+            messages=messages,
+            model=settings.LLM_DEPLOYMENT,
+            response_format={"type": "json_object"},
+            temperature=0.7,  # Slightly higher for creativity
+        )
+        
+        title = json.loads(response.choices[0].message.content).get("title")
+
+        # Validate title
+        if not title or not title.strip():
+            raise HTTPException(
+                status_code=500, detail="Failed to generate a valid title."
+            )
+
+        return VideoTitleGenerateResponse(title=title.strip())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating video title: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

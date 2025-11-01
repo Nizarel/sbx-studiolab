@@ -21,6 +21,9 @@ export interface VideoMetadata {
   originalItem: GalleryItem;
   width?: number;
   height?: number;
+  // Generation metadata
+  prompt?: string;
+  generationId?: string;
   // Analysis metadata from Azure Blob Storage
   analysis?: {
     summary?: string;
@@ -35,8 +38,8 @@ export interface VideoMetadata {
  * Convert GalleryItem to VideoMetadata
  */
 function mapGalleryItemToVideoMetadata(item: GalleryItem): VideoMetadata {
-  // Extract title from prompt (preferred) or name
-  const title = item.metadata?.prompt || item.name.split('.')[0].replace(/_/g, ' ');
+  // Extract title from metadata (preferred), then prompt, then name
+  const title = item.metadata?.title || item.metadata?.prompt || item.name.split('.')[0].replace(/_/g, ' ');
   
   // Extract description from metadata
   const description = item.metadata?.description || '';
@@ -64,6 +67,8 @@ function mapGalleryItemToVideoMetadata(item: GalleryItem): VideoMetadata {
     src,
     title: title.charAt(0).toUpperCase() + title.slice(1), // Capitalize first letter
     description: description,
+    prompt: item.metadata?.prompt,
+    generationId: item.metadata?.generation_id,
     // We'll assign the size later in a structured way
     size: "medium", // Default size, will be overridden
     originalItem: item,

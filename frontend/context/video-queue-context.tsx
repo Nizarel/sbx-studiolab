@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { VideoGenerationJob, createVideoGenerationJob, getVideoGenerationJob, mapSettingsToApiRequest, downloadThenUploadToGallery, generateVideoFilename, analyzeAndUpdateVideoMetadata, createVideoGenerationWithAnalysis, VideoGenerationWithAnalysisRequest } from "@/services/api";
+import { VideoGenerationJob, createVideoGenerationJob, getVideoGenerationJob, mapSettingsToApiRequest, downloadThenUploadToGallery, generateVideoFilename, analyzeAndUpdateVideoMetadata, createVideoGenerationWithAnalysis, VideoGenerationWithAnalysisRequest, generateVideoTitle } from "@/services/api";
 import { toast } from "sonner";
 
 // Global set to track which generation IDs have already been uploaded
@@ -56,6 +56,7 @@ export interface VideoQueueItem {
     analyzeVideo: boolean;
   };
   folder?: string; // Store folder information directly in queue item
+  generatedTitle?: string; // Store the auto-generated title
 }
 
 export interface VideoSettings {
@@ -318,6 +319,9 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
     if (!isClient) return "";
     
     try {
+      // Generate title from prompt immediately for better UX
+      const generatedTitle = await generateVideoTitle(prompt);
+      
       // Generate a temporary local ID for immediate UI feedback
       const tempId = `temp-${Date.now()}`;
       
@@ -331,6 +335,7 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
           analyzeVideo: settings.analyzeVideo || false
         } : undefined,
         folder: settings?.folder, // Store folder directly in queue item
+        generatedTitle, // Store the generated title
       };
       
       // Update queue with pending item
@@ -390,7 +395,8 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
                       job,
                       status: "pending", // Job is still in progress, not completed
                       progress: 0, // Start at 0%, polling will update
-                      folder: item.folder // Preserve folder information
+                      folder: item.folder, // Preserve folder information
+                      generatedTitle: item.generatedTitle // Preserve generated title
                     }
                   : item
               )
@@ -416,7 +422,7 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
             setQueueItems(prev => 
               prev.map(item => 
                 item.id === tempId
-                  ? { ...item, id: job.id, job, folder: item.folder } // Preserve folder information
+                  ? { ...item, id: job.id, job, folder: item.folder, generatedTitle: item.generatedTitle } // Preserve folder and title
                   : item
               )
             );
@@ -438,7 +444,7 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
           setQueueItems(prev => 
             prev.map(item => 
               item.id === tempId
-                ? { ...item, id: job.id, job, folder: item.folder } // Preserve folder information
+                ? { ...item, id: job.id, job, folder: item.folder, generatedTitle: item.generatedTitle } // Preserve folder and title
                 : item
             )
           );

@@ -81,6 +81,16 @@ class VideoFilenameGenerateResponse(BaseModel):
     filename: str = Field(..., description="Generated filename")
 
 
+class VideoTitleGenerateRequest(BaseModel):
+    """Request model for generating a video title"""
+    prompt: str = Field(..., description="Prompt describing the video content")
+
+
+class VideoTitleGenerateResponse(BaseModel):
+    """Response model for video title generation"""
+    title: str = Field(..., description="Generated video title")
+
+
 class VideoGenerationWithAnalysisRequest(BaseModel):
     """Request model for generating videos with optional analysis"""
     prompt: str = Field(...,

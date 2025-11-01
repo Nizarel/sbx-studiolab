@@ -73,15 +73,15 @@ export function VideoQueueSidebarCard({ item, onDownload, onRemix, onRefresh, on
     return 0;
   };
 
-  // Get display title (first 50 chars of prompt)
+  // Get display title (generated title from queue item, or first 50 chars of prompt)
   const getTitle = () => {
+    // Try to get generated title from queue item first
+    if (item.generatedTitle) {
+      return item.generatedTitle;
+    }
+    // Fallback to truncated prompt
     const title = item.prompt.substring(0, 50);
     return title.length < item.prompt.length ? `${title}...` : title;
-  };
-
-  // Get video ID (last 8 chars)
-  const getVideoId = () => {
-    return item.job?.id ? item.job.id.substring(item.job.id.length - 12) : item.id.substring(item.id.length - 12);
   };
 
   // Get metadata display
@@ -121,7 +121,7 @@ export function VideoQueueSidebarCard({ item, onDownload, onRemix, onRefresh, on
   const isCompleted = item.job?.status === "completed";
   const isQueued = item.job?.status === "queued";
   const canDownload = isCompleted && item.uploadComplete;
-  const canRemix = isCompleted;
+  const canRemix = isCompleted; // Remix available as soon as completed
 
   return (
     <Card 
@@ -144,23 +144,24 @@ export function VideoQueueSidebarCard({ item, onDownload, onRemix, onRefresh, on
 
         {/* Title and Status */}
         <div className="flex items-start justify-between mb-2 gap-2">
-          <h4 className="text-sm font-medium line-clamp-2 flex-1">{getTitle()}</h4>
+          <div className="flex-1">
+            <h4 className="text-sm font-medium line-clamp-2 mb-1">{getTitle()}</h4>
+            {/* Video ID with copy button - shows full ID */}
+            <div className="flex items-center gap-1">
+              <code className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
+                {item.job?.id || item.id}
+              </code>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 hover:bg-muted/50"
+                onClick={handleCopyId}
+              >
+                <Copy className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
           {getStatusBadge()}
-        </div>
-
-        {/* Video ID */}
-        <div className="flex items-center gap-2 mb-3">
-          <code className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
-            {getVideoId()}
-          </code>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={handleCopyId}
-          >
-            <Copy className="h-3 w-3" />
-          </Button>
         </div>
 
         {/* Prompt */}

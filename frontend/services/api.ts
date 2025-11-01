@@ -2082,3 +2082,34 @@ export async function createRemixVideoJob(request: VideoRemixRequest): Promise<V
 
   return await response.json();
 }
+
+export async function generateVideoTitle(prompt: string): Promise<string> {
+  const url = `${API_BASE_URL}/videos/title/generate`;
+  
+  if (API_DEBUG) {
+    console.log(`Generating title for prompt: ${prompt.substring(0, 50)}...`);
+    console.log(`POST ${url}`);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prompt }),
+  });
+
+  if (API_DEBUG) {
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+  }
+
+  if (!response.ok) {
+    // Fallback to first 50 chars of prompt if title generation fails
+    console.warn('Title generation failed, using prompt fallback');
+    return prompt.substring(0, 50) + (prompt.length > 50 ? '...' : '');
+  }
+
+  const data = await response.json();
+  return data.title || prompt.substring(0, 50) + (prompt.length > 50 ? '...' : '');
+}
+

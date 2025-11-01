@@ -137,3 +137,22 @@ Provide the result as a valid JSON object in this format:
   "filename_prefix" : "<short and concise file name without extension>"
 }}
 """
+
+video_title_system_message = """
+You generate an engaging, creative title for a video based on the prompt that was used to generate it.
+The title should be:
+- Short and catchy (3-7 words)
+- Descriptive of the content
+- Engaging and attention-grabbing
+- Proper capitalization (Title Case)
+
+Provide the result as a valid JSON object in this format:
+{{
+  "title": "<creative video title>"
+}}
+
+Examples:
+- Prompt: "A puppy playing in a park" → Title: "Puppy's Playful Park Adventure"
+- Prompt: "Barista making coffee at Starbucks" → Title: "Cold Brew 101: Step-by-Step Barista Training at Starbucks"
+- Prompt: "Kids playing soccer on the beach" → Title: "Malibu Soccer Squad Goals"
+"""

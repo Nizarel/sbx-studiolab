@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   X, ChevronLeft, ChevronRight, Play, Pause, 
-  Download, Trash2, FolderUp, Eye, Loader2, Maximize, Minimize, Wand2, Volume2, VolumeX 
+  Download, Trash2, FolderUp, Eye, Loader2, Maximize, Minimize, Wand2, Volume2, VolumeX, Copy 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -857,7 +857,38 @@ export function VideoDetailView({
                   </svg>
                   Details
                 </h3>
-                <dl className="grid grid-cols-2 gap-3 text-sm">
+                <dl className="grid grid-cols-1 gap-3 text-sm">
+                  {/* Title */}
+                  {video.title && (
+                    <div className="p-2 rounded-md border border-border/30 bg-muted/20">
+                      <dt className="text-xs text-muted-foreground mb-1">Title</dt>
+                      <dd className="font-medium">{video.title}</dd>
+                    </div>
+                  )}
+                  
+                  {/* Video ID with Copy */}
+                  {video.generationId && (
+                    <div className="p-2 rounded-md border border-border/30 bg-muted/20">
+                      <dt className="text-xs text-muted-foreground mb-1">Video ID</dt>
+                      <dd className="font-mono text-xs flex items-center gap-2">
+                        <span className="flex-1 truncate">{video.generationId}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(video.generationId!);
+                            toast.success("Video ID copied to clipboard");
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                
+                <dl className="grid grid-cols-2 gap-3 text-sm mt-3">
                   <div className="p-2 rounded-md border border-border/30 bg-muted/20">
                     <dt className="text-xs text-muted-foreground mb-1">Format</dt>
                     <dd className="font-medium">MP4 Video</dd>
