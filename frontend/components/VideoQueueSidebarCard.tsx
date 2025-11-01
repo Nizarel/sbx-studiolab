@@ -197,9 +197,24 @@ export function VideoQueueSidebarCard({ item, onDownload, onRemix, onRefresh, on
 
         {/* Queued status */}
         {isQueued && (
-          <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Processing...</span>
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Processing...</span>
+              </div>
+              {onRefresh && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={() => onRefresh(item)}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Refresh
+                </Button>
+              )}
+            </div>
           </div>
         )}
 

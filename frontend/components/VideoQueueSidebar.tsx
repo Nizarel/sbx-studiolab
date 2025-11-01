@@ -28,7 +28,7 @@ export function VideoQueueSidebar({ onDownload, onRemix, onRefresh, onDownloadAl
   const hasCompletedItems = recentItems.some(item => item.job?.status === "completed");
 
   return (
-    <div className="w-80 border-r border-border/50 bg-background/30 flex flex-col h-full">
+    <div className="w-96 border-r border-border/50 bg-background/30 flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-border/50 flex-shrink-0">
         <div className="flex items-center gap-2 mb-1">
