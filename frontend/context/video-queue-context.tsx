@@ -374,7 +374,7 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
             // Don't show immediate success toast for unified endpoint
             // The regular polling mechanism will handle the final success notification
             
-            // Update the queue item with the completed job
+            // Update the queue item with the job - let polling handle status updates
             setQueueItems(prev => 
               prev.map(item => 
                 item.id === tempId
@@ -382,9 +382,8 @@ export function VideoQueueProvider({ children }: { children: React.ReactNode }) 
                       ...item, 
                       id: job.id, 
                       job,
-                      status: "completed",
-                      progress: 100,
-                      uploadComplete: true, // Mark as complete since unified endpoint handles everything
+                      status: "pending", // Job is still in progress, not completed
+                      progress: 0, // Start at 0%, polling will update
                       folder: item.folder // Preserve folder information
                     }
                   : item
