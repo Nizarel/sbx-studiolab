@@ -71,7 +71,60 @@ param cosmosAccountName string = 'visionary-lab-cosmos'
 param cosmosDatabaseName string = 'VisionaryLabDB'
 param cosmosContainerName string = 'visionarylab'
 
-// No Virtual Network or Private Endpoints in public-only mode
+// Parameters for Private Networking
+@description('Enable private endpoints for Storage and Cosmos DB')
+param enablePrivateEndpoints bool = false
+
+@description('Virtual Network name')
+param vnetName string = 'vnet-${environmentName}'
+
+@description('VNet address prefix')
+param vnetAddressPrefix string = '10.0.0.0/16'
+
+@description('Container Apps subnet address prefix')
+param containerAppsSubnetPrefix string = '10.0.0.0/23'
+
+@description('Private Endpoints subnet address prefix')
+param privateEndpointsSubnetPrefix string = '10.0.2.0/24'
+
+// Virtual Network (when private endpoints are enabled)
+module vnetMod './modules/virtualNetwork.bicep' = if (enablePrivateEndpoints) {
+  name: 'vnetMod'
+  params: {
+    location: location
+    vnetName: vnetName
+    vnetAddressPrefix: vnetAddressPrefix
+    containerAppsSubnetPrefix: containerAppsSubnetPrefix
+    privateEndpointsSubnetPrefix: privateEndpointsSubnetPrefix
+    deployNew: true
+  }
+}
+
+// Private DNS Zone for Storage Blob
+module storageBlobDnsZoneMod './modules/privateDnsZone.bicep' = if (enablePrivateEndpoints) {
+  name: 'storageBlobDnsZoneMod'
+  params: {
+    privateDnsZoneName: 'privatelink.blob.${environment().suffixes.storage}'
+    vnetId: vnetMod.outputs.vnetId
+    deployNew: true
+  }
+  dependsOn: [
+    vnetMod
+  ]
+}
+
+// Private DNS Zone for Cosmos DB
+module cosmosDnsZoneMod './modules/privateDnsZone.bicep' = if (enablePrivateEndpoints) {
+  name: 'cosmosDnsZoneMod'
+  params: {
+    privateDnsZoneName: 'privatelink.documents.azure.com'
+    vnetId: vnetMod.outputs.vnetId
+    deployNew: true
+  }
+  dependsOn: [
+    vnetMod
+  ]
+}
 
 // Azure Storage Account
 module storageAccountMod './modules/storageAccount.bicep' = {
@@ -81,6 +134,7 @@ module storageAccountMod './modules/storageAccount.bicep' = {
     storageAccountName: storageAccountName
     // keyVaultName: keyVaultMod.outputs.keyVaultName
     deployNew: true // set false to reuse an existing storage account
+    publicNetworkAccess: enablePrivateEndpoints ? 'Disabled' : 'Enabled'
   }
 }
 
@@ -96,6 +150,24 @@ module storageContainerMod './modules/storageAccountContainer.bicep' = {
   }
   dependsOn: [
     storageAccountMod
+  ]
+}
+
+// Private Endpoint for Storage Account
+module storagePrivateEndpointMod './modules/storagePrivateEndpoint.bicep' = if (enablePrivateEndpoints) {
+  name: 'storagePrivateEndpointMod'
+  params: {
+    location: location
+    privateEndpointName: 'pe-${storageAccountName}'
+    storageAccountId: storageAccountMod.outputs.storageAccountId
+    subnetId: vnetMod.outputs.privateEndpointsSubnetId
+    privateDnsZoneId: storageBlobDnsZoneMod.outputs.privateDnsZoneId
+    deployNew: true
+  }
+  dependsOn: [
+    storageAccountMod
+    vnetMod
+    storageBlobDnsZoneMod
   ]
 }
 
@@ -116,7 +188,7 @@ module containerRegistryMod './modules/containerRegistry.bicep' = {
 // Generate a short, stable prefix per environment to avoid name collisions across deployments
 var cosmosPrefix = toLower(substring(uniqueString(resourceGroup().id, environmentName), 0, 5))
 var cosmosAccountNamePrefixed = '${cosmosPrefix}-${cosmosAccountName}'
-module cosmosDbMod './modules/cosmosDb.bicep' = {
+module cosmosDbMod './modules/cosmosDB.bicep' = {
   name: 'cosmosDbMod'
   params: {
     location: location
@@ -125,11 +197,27 @@ module cosmosDbMod './modules/cosmosDb.bicep' = {
     containerName: cosmosContainerName
     subnetId: '' // Private Endpoint is used; VNet rules not required
     deployNew: true
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: enablePrivateEndpoints ? 'Disabled' : 'Enabled'
   }
 }
 
-// No Private DNS or Private Endpoints in public-only mode
+// Private Endpoint for Cosmos DB
+module cosmosPrivateEndpointMod './modules/cosmosPrivateEndpoint.bicep' = if (enablePrivateEndpoints) {
+  name: 'cosmosPrivateEndpointMod'
+  params: {
+    location: location
+    privateEndpointName: 'pe-${cosmosAccountNamePrefixed}'
+    cosmosAccountId: cosmosDbMod.outputs.cosmosAccountId
+    subnetId: vnetMod.outputs.privateEndpointsSubnetId
+    privateDnsZoneId: cosmosDnsZoneMod.outputs.privateDnsZoneId
+    deployNew: true
+  }
+  dependsOn: [
+    cosmosDbMod
+    vnetMod
+    cosmosDnsZoneMod
+  ]
+}
 
 // OpenAI deployment module for LLM
 // This module creates an OpenAI deployment for the LLM model
@@ -176,9 +264,12 @@ module containerAppEnvMod './modules/containerAppEnv.bicep' = {
     location: location
     containerAppEnvName: containerAppEnvName
     logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
-    subnetId: ''
+    subnetId: enablePrivateEndpoints ? vnetMod.outputs.containerAppsSubnetId : ''
     deployNew: true // set false to reuse an existing environment
   }
+  dependsOn: enablePrivateEndpoints ? [
+    vnetMod
+  ] : []
 }
 
 // Container App for Backend

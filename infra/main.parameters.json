@@ -40,6 +40,9 @@
     },
     "SORA_DEPLOYMENT": {
       "value": "${SORA_DEPLOYMENT}"
+    },
+    "enablePrivateEndpoints": {
+      "value": false
     }
   }
 }

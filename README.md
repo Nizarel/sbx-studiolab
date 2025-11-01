@@ -223,6 +223,23 @@ During `azd up`, you'll be prompted to configure your Azure OpenAI resources:
 ✨ That's it! Your Visionary Lab will be running on Azure Container Apps with:
 - Azure Container Registry for Docker images
 - Azure Storage for generated content
+- Azure Cosmos DB for metadata and asset management
 - Automatic scaling and monitoring
 
 📖 For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)
+
+### 🔒 Private Endpoints (Secure Deployment)
+
+For organizations requiring private network connectivity with no public internet access:
+
+```bash
+azd up --parameters enablePrivateEndpoints=true
+```
+
+This deploys with:
+- Virtual Network with dedicated subnets
+- Private Endpoints for Storage and Cosmos DB
+- Private DNS Zones for name resolution
+- Complete network isolation
+
+📖 See the [Private Endpoints Deployment Guide](PRIVATE_ENDPOINTS.md) for detailed instructions
