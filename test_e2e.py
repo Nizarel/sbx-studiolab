@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Optional
 
 # Backend URL
-BASE_URL = "https://ca-backend-sbuxstudio.delightfulground-306a1d02.eastus2.azurecontainerapps.io"
+BASE_URL = "https://ca-backend-sbuxstudio2.wonderfulglacier-229344db.eastus2.azurecontainerapps.io"
 API_V1 = f"{BASE_URL}/api/v1"
 
 
