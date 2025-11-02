@@ -181,3 +181,8 @@ videos
 # Visionary Lab
 notebooks/video-generations/
 frontend/lighthouse-report.html
+
+# Bicep compiled templates (ARM JSON)
+infra/main.json
+infra/**/*.json
+!infra/main.parameters.json
