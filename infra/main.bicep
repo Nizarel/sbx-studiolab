@@ -87,6 +87,31 @@ param containerAppsSubnetPrefix string = '10.0.0.0/23'
 @description('Private Endpoints subnet address prefix')
 param privateEndpointsSubnetPrefix string = '10.0.2.0/24'
 
+// Parameters for second Container App Environment
+@description('Deploy a second Container App Environment')
+param deploySecondEnvironment bool = false
+
+@description('Name of the second Container App Environment')
+param containerAppEnvName2 string = 'cae-${environmentName}2'
+
+@description('Name of the second backend Container App')
+param containerAppNameBackend2 string = 'ca-backend-${environmentName}2'
+
+@description('Name of the second frontend Container App')
+param containerAppNameFrontend2 string = 'ca-frontend-${environmentName}2'
+
+@description('Name of the second Log Analytics workspace')
+param logAnalyticsWorkspaceName2 string = 'log-${environmentName}2'
+
+@description('Deploy new VNet (set false to reuse existing)')
+param deployNewVNet bool = true
+
+@description('Deploy new DNS zones (set false to reuse existing)')
+param deployNewDnsZones bool = true
+
+@description('Deploy new private endpoints (set false to reuse existing)')
+param deployNewPrivateEndpoints bool = true
+
 // Virtual Network (when private endpoints are enabled)
 module vnetMod './modules/virtualNetwork.bicep' = if (enablePrivateEndpoints) {
   name: 'vnetMod'
@@ -96,7 +121,7 @@ module vnetMod './modules/virtualNetwork.bicep' = if (enablePrivateEndpoints) {
     vnetAddressPrefix: vnetAddressPrefix
     containerAppsSubnetPrefix: containerAppsSubnetPrefix
     privateEndpointsSubnetPrefix: privateEndpointsSubnetPrefix
-    deployNew: true
+    deployNew: deployNewVNet
   }
 }
 
@@ -106,7 +131,7 @@ module storageBlobDnsZoneMod './modules/privateDnsZone.bicep' = if (enablePrivat
   params: {
     privateDnsZoneName: 'privatelink.blob.${environment().suffixes.storage}'
     vnetId: vnetMod.outputs.vnetId
-    deployNew: true
+    deployNew: deployNewDnsZones
   }
   dependsOn: [
     vnetMod
@@ -119,7 +144,7 @@ module cosmosDnsZoneMod './modules/privateDnsZone.bicep' = if (enablePrivateEndp
   params: {
     privateDnsZoneName: 'privatelink.documents.azure.com'
     vnetId: vnetMod.outputs.vnetId
-    deployNew: true
+    deployNew: deployNewDnsZones
   }
   dependsOn: [
     vnetMod
@@ -162,7 +187,7 @@ module storagePrivateEndpointMod './modules/storagePrivateEndpoint.bicep' = if (
     storageAccountId: storageAccountMod.outputs.storageAccountId
     subnetId: vnetMod.outputs.privateEndpointsSubnetId
     privateDnsZoneId: storageBlobDnsZoneMod.outputs.privateDnsZoneId
-    deployNew: true
+    deployNew: deployNewPrivateEndpoints
   }
   dependsOn: [
     storageAccountMod
@@ -210,7 +235,7 @@ module cosmosPrivateEndpointMod './modules/cosmosPrivateEndpoint.bicep' = if (en
     cosmosAccountId: cosmosDbMod.outputs.cosmosAccountId
     subnetId: vnetMod.outputs.privateEndpointsSubnetId
     privateDnsZoneId: cosmosDnsZoneMod.outputs.privateDnsZoneId
-    deployNew: true
+    deployNew: deployNewPrivateEndpoints
   }
   dependsOn: [
     cosmosDbMod
@@ -343,6 +368,118 @@ module containerAppFrontend './modules/containerApp.bicep' = {
   }
 }
 
+// ========== SECOND CONTAINER APP ENVIRONMENT AND APPS ==========
+// Deploy a second Container App Environment with VNet integration
+module containerAppEnvMod2 './modules/containerAppEnv.bicep' = if (deploySecondEnvironment) {
+  name: 'containerAppEnvMod2'
+  params: {
+    location: location
+    containerAppEnvName: containerAppEnvName2
+    logAnalyticsWorkspaceName: logAnalyticsWorkspaceName2
+    subnetId: enablePrivateEndpoints ? vnetMod.outputs.containerAppsSubnetId : ''
+    deployNew: true // Always deploy new for the second environment
+  }
+  dependsOn: enablePrivateEndpoints ? [
+    vnetMod
+  ] : []
+}
+
+// Container App for Backend (Second Environment)
+module containerAppBackend2 './modules/containerApp.bicep' = if (deploySecondEnvironment) {
+  name: 'containerAppBackend2'
+  params: {
+    location: location
+    containerAppName: containerAppNameBackend2
+    containerAppEnvId: containerAppEnvMod2.outputs.containerAppEnvId
+    targetPort: 80
+    deployNew: true
+    AZURE_BLOB_SERVICE_URL: storageAccountMod.outputs.storageAccountPrimaryEndpoint
+    AZURE_STORAGE_ACCOUNT_NAME: storageAccountName
+    AZURE_BLOB_IMAGE_CONTAINER: 'images'
+    DOCKER_IMAGE: DOCKER_IMAGE_BACKEND
+    AZURE_CONTAINER_REGISTRY_ENDPOINT: containerRegistryMod.outputs.containerRegistryLoginServer
+    AZURE_CONTAINER_REGISTRY_USERNAME: containerRegistryMod.outputs.containerRegistryUsername
+    AZURE_CONTAINER_REGISTRY_PASSWORD: containerRegistryMod.outputs.containerRegistryPassword
+    IMAGEGEN_AOAI_RESOURCE: IMAGEGEN_AOAI_RESOURCE
+    IMAGEGEN_DEPLOYMENT: IMAGEGEN_DEPLOYMENT
+    IMAGEGEN_AOAI_API_KEY: IMAGEGEN_AOAI_API_KEY
+    LLM_AOAI_RESOURCE: LLM_AOAI_RESOURCE
+    LLM_DEPLOYMENT: LLM_DEPLOYMENT
+    LLM_AOAI_API_KEY: LLM_AOAI_API_KEY
+    SORA_AOAI_RESOURCE: SORA_AOAI_RESOURCE
+    SORA_DEPLOYMENT: SORA_DEPLOYMENT
+    SORA_AOAI_API_KEY: SORA_AOAI_API_KEY
+    COSMOS_ENDPOINT: cosmosDbMod.outputs.cosmosAccountEndpoint
+    COSMOS_DATABASE_NAME: cosmosDbMod.outputs.databaseName
+    COSMOS_CONTAINER_NAME: cosmosDbMod.outputs.containerName
+    azdServiceName: 'backend2'
+  }
+  dependsOn: [
+    cosmosDbMod
+    containerAppEnvMod2
+  ]
+}
+
+// Container App for Frontend (Second Environment)
+module containerAppFrontend2 './modules/containerApp.bicep' = if (deploySecondEnvironment) {
+  name: 'containerAppFrontend2'
+  params: {
+    location: location
+    containerAppName: containerAppNameFrontend2
+    containerAppEnvId: containerAppEnvMod2.outputs.containerAppEnvId
+    targetPort: 3000
+    deployNew: true
+    AZURE_BLOB_SERVICE_URL: storageAccountMod.outputs.storageAccountPrimaryEndpoint
+    AZURE_STORAGE_ACCOUNT_NAME: storageAccountName
+    AZURE_BLOB_IMAGE_CONTAINER: 'images'
+    DOCKER_IMAGE: DOCKER_IMAGE_FRONTEND
+    AZURE_CONTAINER_REGISTRY_ENDPOINT: containerRegistryMod.outputs.containerRegistryLoginServer
+    AZURE_CONTAINER_REGISTRY_USERNAME: containerRegistryMod.outputs.containerRegistryUsername
+    AZURE_CONTAINER_REGISTRY_PASSWORD: containerRegistryMod.outputs.containerRegistryPassword
+    IMAGEGEN_AOAI_RESOURCE: IMAGEGEN_AOAI_RESOURCE
+    IMAGEGEN_DEPLOYMENT: IMAGEGEN_DEPLOYMENT
+    IMAGEGEN_AOAI_API_KEY: IMAGEGEN_AOAI_API_KEY
+    LLM_AOAI_RESOURCE: LLM_AOAI_RESOURCE
+    LLM_DEPLOYMENT: LLM_DEPLOYMENT
+    LLM_AOAI_API_KEY: LLM_AOAI_API_KEY
+    API_PROTOCOL: API_PROTOCOL == '' ? 'https' : API_PROTOCOL
+    API_PORT: API_PORT == '' ? '443' : API_PORT
+    // Use the second backend's FQDN
+    API_HOSTNAME: API_HOSTNAME == '' ? '${containerAppNameBackend2}.${containerAppEnvMod2.outputs.containerAppDefaultDomain}' : API_HOSTNAME
+    azdServiceName: 'frontend2'
+  }
+  dependsOn: [
+    containerAppBackend2
+  ]
+}
+
+// Role assignment for second backend Container App
+module cosmosRoleAssignmentMod2 './modules/cosmosRoleAssignment.bicep' = if (deploySecondEnvironment) {
+  name: 'cosmosRoleAssignmentMod2'
+  params: {
+    cosmosAccountName: cosmosAccountNamePrefixed
+    containerAppPrincipalId: containerAppBackend2.outputs.containerAppPrincipalId
+    dataContributorRoleId: cosmosDbMod.outputs.dataContributorRoleId
+  }
+  dependsOn: [
+    containerAppBackend2
+    cosmosDbMod
+  ]
+}
+
+// Storage role assignment for second backend Container App
+module storageRoleAssignmentMod2 './modules/storageRoleAssignment.bicep' = if (deploySecondEnvironment) {
+  name: 'storageRoleAssignmentMod2'
+  params: {
+    storageAccountName: storageAccountName
+    containerAppPrincipalId: containerAppBackend2.outputs.containerAppPrincipalId
+  }
+  dependsOn: [
+    containerAppBackend2
+    storageAccountMod
+  ]
+}
+
 // Role assignment module - deployed after both Container App and Cosmos DB exist
 module cosmosRoleAssignmentMod './modules/cosmosRoleAssignment.bicep' = {
   name: 'cosmosRoleAssignmentMod'
@@ -382,3 +519,8 @@ output COSMOS_DB_ENDPOINT string = cosmosDbMod.outputs.cosmosAccountEndpoint
 output COSMOS_DB_DATABASE_NAME string = cosmosDbMod.outputs.databaseName
 output COSMOS_DB_CONTAINER_NAME string = cosmosDbMod.outputs.containerName
 // Intentionally do not output the Cosmos DB key; using Managed Identity + RBAC
+
+// Outputs for second environment (conditional)
+output AZURE_CONTAINER_ENVIRONMENT_NAME_2 string = deploySecondEnvironment ? containerAppEnvMod2.outputs.containerAppEnvId : ''
+output BACKEND_URI_2 string = deploySecondEnvironment ? 'https://${containerAppBackend2.outputs.containerAppFqdn}' : ''
+output FRONTEND_URI_2 string = deploySecondEnvironment ? 'https://${containerAppFrontend2.outputs.containerAppFqdn}' : ''

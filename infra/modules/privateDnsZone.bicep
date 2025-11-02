@@ -16,6 +16,11 @@ resource privateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (dep
   location: location
 }
 
+// Reference existing Private DNS Zone when deployNew is false
+resource existingPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' existing = if (!deployNew) {
+  name: privateDnsZoneName
+}
+
 // Link DNS Zone to VNet
 resource privateDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (deployNew) {
   parent: privateDnsZone
@@ -29,5 +34,5 @@ resource privateDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLin
   }
 }
 
-output privateDnsZoneId string = deployNew ? privateDnsZone.id : ''
-output privateDnsZoneName string = deployNew ? privateDnsZone.name : privateDnsZoneName
+output privateDnsZoneId string = deployNew ? privateDnsZone.id : existingPrivateDnsZone.id
+output privateDnsZoneName string = privateDnsZoneName
