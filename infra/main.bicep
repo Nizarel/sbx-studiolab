@@ -321,7 +321,7 @@ module containerAppBackend './modules/containerApp.bicep' = {
     COSMOS_ENDPOINT: cosmosDbMod.outputs.cosmosAccountEndpoint
     COSMOS_DATABASE_NAME: cosmosDbMod.outputs.databaseName
     COSMOS_CONTAINER_NAME: cosmosDbMod.outputs.containerName
-    azdServiceName: 'backend'
+    azdServiceName: ''
   }
 }
 
@@ -354,7 +354,7 @@ module containerAppFrontend './modules/containerApp.bicep' = {
     API_PORT: API_PORT == '' ? '443' : API_PORT
     // Use the backend external FQDN (public Internet)
     API_HOSTNAME: API_HOSTNAME == '' ? '${containerAppNameBackend}.${containerAppEnvMod.outputs.containerAppDefaultDomain}' : API_HOSTNAME
-    azdServiceName: 'frontend'
+    azdServiceName: ''
   }
 }
 
@@ -399,7 +399,7 @@ module containerAppBackend2 './modules/containerApp.bicep' = if (deploySecondEnv
     COSMOS_ENDPOINT: cosmosDbMod.outputs.cosmosAccountEndpoint
     COSMOS_DATABASE_NAME: cosmosDbMod.outputs.databaseName
     COSMOS_CONTAINER_NAME: cosmosDbMod.outputs.containerName
-    azdServiceName: 'backend2'
+    azdServiceName: 'backend'
   }
 }
 
@@ -429,7 +429,7 @@ module containerAppFrontend2 './modules/containerApp.bicep' = if (deploySecondEn
     API_PORT: API_PORT == '' ? '443' : API_PORT
     // Use the second backend's FQDN
     API_HOSTNAME: API_HOSTNAME == '' ? '${containerAppNameBackend2}.${containerAppEnvMod2!.outputs.containerAppDefaultDomain}' : API_HOSTNAME
-    azdServiceName: 'frontend2'
+    azdServiceName: 'frontend'
   }
 }
 
