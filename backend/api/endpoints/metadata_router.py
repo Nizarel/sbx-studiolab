@@ -19,9 +19,12 @@ from backend.models.metadata_models import (
     MetadataSyncResponse,
 )
 from backend.models.gallery import MediaType
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_CORE_STORAGE_FIELDS = ("blob_name", "container", "url", "filename", "size")
 
 
 def get_cosmos_service() -> CosmosDBService:
@@ -34,6 +37,106 @@ def get_cosmos_service() -> CosmosDBService:
             status_code=503,
             detail="Metadata service is currently unavailable. Please check your Cosmos DB configuration.",
         )
+
+
+def get_azure_storage_service() -> AzureBlobStorageService:
+    """Dependency to get Azure Blob Storage service instance."""
+    try:
+        return AzureBlobStorageService()
+    except Exception as e:
+        logger.error(f"Failed to initialize Azure Blob Storage service: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Blob storage service is currently unavailable. Please check your storage configuration.",
+        )
+
+
+def _hydrate_core_storage_fields(
+    *,
+    asset_id: str,
+    media_type: str,
+    azure_service: AzureBlobStorageService,
+) -> Optional[Dict[str, Any]]:
+    """Best-effort reconstruction of required blob metadata for legacy records."""
+    try:
+        media_type_enum = MediaType(media_type)
+    except ValueError:
+        logger.warning(
+            "Unable to hydrate metadata for asset %s: unknown media_type '%s'",
+            asset_id,
+            media_type,
+        )
+        return None
+
+    if media_type_enum == MediaType.IMAGE:
+        container = settings.AZURE_BLOB_IMAGE_CONTAINER
+    else:
+        container = settings.AZURE_BLOB_VIDEO_CONTAINER
+
+    if not container:
+        logger.warning(
+            "Unable to hydrate metadata for asset %s: container not configured for media_type '%s'",
+            asset_id,
+            media_type_enum,
+        )
+        return None
+
+    try:
+        search_results = azure_service.list_blobs(
+            container_name=container,
+            prefix=asset_id,
+            limit=50,
+        )
+    except Exception as storage_error:
+        logger.warning(
+            "Failed to list blobs while hydrating asset %s: %s",
+            asset_id,
+            storage_error,
+        )
+        return None
+
+    blobs = search_results.get("blobs", [])
+    matching_blob: Optional[Dict[str, Any]] = None
+
+    for blob in blobs:
+        blob_name = blob.get("name", "")
+        if asset_id in blob_name:
+            matching_blob = blob
+            break
+
+    if not matching_blob:
+        # Fallback: match on filename stem if the prefix search produced candidates
+        for blob in blobs:
+            blob_name = blob.get("name", "")
+            candidate_id = blob_name.split("/")[-1].split(".")[0]
+            if candidate_id == asset_id:
+                matching_blob = blob
+                break
+
+    if not matching_blob:
+        return None
+
+    folder_path = matching_blob.get("folder_path") or ""
+    if folder_path and not folder_path.endswith("/"):
+        folder_path = f"{folder_path}/"
+
+    base_fields: Dict[str, Any] = {
+        "blob_name": matching_blob.get("name"),
+        "container": container,
+        "url": matching_blob.get("url"),
+        "filename": matching_blob.get("name", "").split("/")[-1],
+        "size": matching_blob.get("size"),
+    }
+
+    if matching_blob.get("content_type"):
+        base_fields["content_type"] = matching_blob.get("content_type")
+    if folder_path:
+        base_fields["folder_path"] = folder_path
+
+    if any(not base_fields.get(field) for field in _CORE_STORAGE_FIELDS):
+        return None
+
+    return base_fields
 
 
 @router.post("/", response_model=AssetMetadataResponse)
@@ -88,9 +191,16 @@ async def update_asset_metadata(
     media_type: str = Query(..., description="Media type (partition key)"),
     request: AssetMetadataUpdateRequest = Body(...),
     cosmos_service: CosmosDBService = Depends(get_cosmos_service),
+    azure_service: AzureBlobStorageService = Depends(get_azure_storage_service),
 ):
     """Update metadata for an existing asset"""
     try:
+        # Ensure the asset exists before attempting updates so we don't create
+        # partial documents that fail validation downstream.
+        existing_metadata = cosmos_service.get_asset_metadata(asset_id, media_type)
+        if not existing_metadata:
+            raise HTTPException(status_code=404, detail="Asset metadata not found")
+
         # Convert request to dict, excluding None values
         updates = request.dict(exclude_unset=True, exclude_none=True)
 
@@ -98,20 +208,85 @@ async def update_asset_metadata(
             raise HTTPException(
                 status_code=400, detail="No valid updates provided")
 
+        if not existing_metadata.get("doc_type"):
+            existing_metadata["doc_type"] = "asset_metadata"
+            updates.setdefault("doc_type", "asset_metadata")
+
+        # Attempt to repair legacy records that are missing core blob storage fields.
+        missing_fields = [
+            field for field in _CORE_STORAGE_FIELDS if not existing_metadata.get(field)
+        ]
+
+        if missing_fields:
+            storage_seed = _hydrate_core_storage_fields(
+                asset_id=asset_id,
+                media_type=media_type,
+                azure_service=azure_service,
+            )
+
+            if storage_seed:
+                for field, value in storage_seed.items():
+                    if not existing_metadata.get(field) and value is not None:
+                        existing_metadata[field] = value
+                        updates.setdefault(field, value)
+
+                # folder_path and content_type are nice-to-have if we were able to resolve them
+                for optional_field in ("folder_path", "content_type"):
+                    value = storage_seed.get(optional_field)
+                    if value is not None and not existing_metadata.get(optional_field):
+                        existing_metadata[optional_field] = value
+                        updates.setdefault(optional_field, value)
+
+                # Refresh list of missing fields after attempting hydration
+                missing_fields = [
+                    field for field in _CORE_STORAGE_FIELDS if not existing_metadata.get(field)
+                ]
+
+            if missing_fields:
+                logger.error(
+                    "Asset %s (media_type=%s) missing core metadata fields: %s",
+                    asset_id,
+                    media_type,
+                    ", ".join(missing_fields),
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Asset metadata is missing required storage information and "
+                        "could not be auto-repaired. Please resync metadata for this asset "
+                        "or recreate the asset."
+                    ),
+                )
+
         updated_metadata = cosmos_service.update_asset_metadata(
             asset_id, media_type, updates
         )
 
         # Filter out Cosmos DB system fields (those starting with _)
         filtered_metadata = {
-            k: v for k, v in updated_metadata.items()
-            if not k.startswith('_')
+            k: v for k, v in updated_metadata.items() if not k.startswith("_")
         }
+
+        try:
+            metadata_model = AssetMetadata(**filtered_metadata)
+        except ValidationError as validation_error:
+            logger.error(
+                "Updated metadata for asset %s failed validation: %s",
+                asset_id,
+                validation_error,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Metadata update partially applied but validation failed. "
+                    "Please verify the stored asset metadata integrity."
+                ),
+            )
 
         return AssetMetadataResponse(
             success=True,
             message="Asset metadata updated successfully",
-            metadata=AssetMetadata(**filtered_metadata),
+            metadata=metadata_model,
         )
     except HTTPException:
         raise

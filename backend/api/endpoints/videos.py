@@ -114,6 +114,9 @@ async def create_video_generation_job(
                 detail="Video generation service is currently unavailable. Please check your environment configuration.",
             )
 
+        # Track optional input reference asset for later cleanup/use
+        input_reference_path: str | None = None
+
         # Check if this is a remix request
         if remix_video_id:
             logger.info(f"Creating remix from video: {remix_video_id}")
