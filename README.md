@@ -243,3 +243,18 @@ This deploys with:
 - Complete network isolation
 
 📖 See the [Private Endpoints Deployment Guide](PRIVATE_ENDPOINTS.md) for detailed instructions
+
+### 🔁 Second Container App Environment (Advanced)
+
+Deploy a second Container App Environment in the same resource group with different names:
+
+```bash
+azd up --parameters enablePrivateEndpoints=true --parameters deploySecondEnvironment=true
+```
+
+This creates:
+- New Container App Environment: `cae-sbuxstudio2`
+- New Container Apps: `ca-backend-sbuxstudio2`, `ca-frontend-sbuxstudio2`
+- Reuses existing VNet, DNS zones, Storage, and Cosmos DB
+
+📖 See the [Second Environment Deployment Guide](DEPLOYMENT_SECOND_ENVIRONMENT.md) for detailed instructions

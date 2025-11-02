@@ -43,6 +43,18 @@
     },
     "enablePrivateEndpoints": {
       "value": false
+    },
+    "deploySecondEnvironment": {
+      "value": false
+    },
+    "deployNewVNet": {
+      "value": true
+    },
+    "deployNewDnsZones": {
+      "value": true
+    },
+    "deployNewPrivateEndpoints": {
+      "value": true
     }
   }
 }

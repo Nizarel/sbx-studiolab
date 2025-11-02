@@ -60,8 +60,13 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = if (deployNew) {
   }
 }
 
+// Reference existing VNet when deployNew is false
+resource existingVnet 'Microsoft.Network/virtualNetworks@2023-11-01' existing = if (!deployNew) {
+  name: vnetName
+}
+
 // Output subnet IDs
-output vnetId string = deployNew ? vnet.id : ''
-output vnetName string = deployNew ? vnet.name : vnetName
-output containerAppsSubnetId string = deployNew ? '${vnet.id}/subnets/${containerAppsSubnetName}' : ''
-output privateEndpointsSubnetId string = deployNew ? '${vnet.id}/subnets/${privateEndpointsSubnetName}' : ''
+output vnetId string = deployNew ? vnet.id : existingVnet.id
+output vnetName string = vnetName
+output containerAppsSubnetId string = deployNew ? '${vnet.id}/subnets/${containerAppsSubnetName}' : '${existingVnet.id}/subnets/${containerAppsSubnetName}'
+output privateEndpointsSubnetId string = deployNew ? '${vnet.id}/subnets/${privateEndpointsSubnetName}' : '${existingVnet.id}/subnets/${privateEndpointsSubnetName}'
