@@ -215,6 +215,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if(deployNew) {
   }
 }
 
-output containerAppId string = containerApp.id
-output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
-output containerAppPrincipalId string = deployNew ? containerApp.identity.principalId : ''
+// Reference to existing Container App when not deploying new
+resource existingContainerApp 'Microsoft.App/containerApps@2024-03-01' existing = if(!deployNew) {
+  name: containerAppName
+}
+
+output containerAppId string = deployNew ? containerApp!.id : existingContainerApp!.id
+output containerAppFqdn string = deployNew ? containerApp!.properties.configuration.ingress.fqdn : existingContainerApp!.properties.configuration.ingress.fqdn
+output containerAppPrincipalId string = deployNew ? containerApp!.identity.principalId : existingContainerApp!.identity.principalId

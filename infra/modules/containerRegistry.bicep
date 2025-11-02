@@ -19,8 +19,8 @@ resource existingRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' ex
   name: containerRegistryName
 }
 
-output containerRegistryId string = deployNew ? containerRegistry.id : existingRegistry.id
-output containerRegistryName string = deployNew ? containerRegistry.name : existingRegistry.name
-output containerRegistryLoginServer string = deployNew ? containerRegistry.properties.loginServer : existingRegistry.properties.loginServer
-output containerRegistryUsername string = deployNew ? containerRegistry.listCredentials().username : existingRegistry.listCredentials().username
-output containerRegistryPassword string = deployNew ? containerRegistry.listCredentials().passwords[0].value : existingRegistry.listCredentials().passwords[0].value
+output containerRegistryId string = deployNew ? containerRegistry!.id : existingRegistry!.id
+output containerRegistryName string = containerRegistryName
+output containerRegistryLoginServer string = deployNew ? containerRegistry!.properties.loginServer : existingRegistry!.properties.loginServer
+output containerRegistryUsername string = deployNew ? listCredentials(resourceId('Microsoft.ContainerRegistry/registries', containerRegistryName), '2023-07-01').username : listCredentials(resourceId('Microsoft.ContainerRegistry/registries', containerRegistryName), '2023-07-01').username
+output containerRegistryPassword string = deployNew ? listCredentials(resourceId('Microsoft.ContainerRegistry/registries', containerRegistryName), '2023-07-01').passwords[0].value : listCredentials(resourceId('Microsoft.ContainerRegistry/registries', containerRegistryName), '2023-07-01').passwords[0].value

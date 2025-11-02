@@ -133,12 +133,40 @@ resource dataContributorRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefin
   }
 }
 
+// Reference to existing Cosmos DB account when not deploying new
+resource existingCosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = if(!deployNew) {
+  name: uniqueCosmosAccountName
+}
+
+// Reference to existing database
+resource existingSqlDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' existing = if(!deployNew) {
+  parent: existingCosmosAccount
+  name: databaseName
+}
+
+// Reference to existing container
+resource existingVisionarylabContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' existing = if(!deployNew) {
+  parent: existingSqlDatabase
+  name: containerName
+}
+
+// Reference to existing role definitions
+resource existingDataReaderRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@2024-05-15' existing = if(!deployNew) {
+  parent: existingCosmosAccount
+  name: guid(existingCosmosAccount.id, 'sql-role-definition-reader')
+}
+
+resource existingDataContributorRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@2024-05-15' existing = if(!deployNew) {
+  parent: existingCosmosAccount
+  name: guid(existingCosmosAccount.id, 'sql-role-definition-contributor')
+}
+
 // Outputs
-output cosmosAccountId string = cosmosAccount.id
-output cosmosAccountName string = cosmosAccount.name
-output cosmosAccountEndpoint string = cosmosAccount.properties.documentEndpoint
-output databaseName string = sqlDatabase.name
-output containerName string = visionarylabContainer.name
-output systemAssignedIdentityPrincipalId string = cosmosAccount.identity.principalId
-output dataReaderRoleId string = dataReaderRole.id
-output dataContributorRoleId string = dataContributorRole.id
+output cosmosAccountId string = deployNew ? cosmosAccount!.id : existingCosmosAccount!.id
+output cosmosAccountName string = deployNew ? cosmosAccount!.name : existingCosmosAccount!.name
+output cosmosAccountEndpoint string = deployNew ? cosmosAccount!.properties.documentEndpoint : existingCosmosAccount!.properties.documentEndpoint
+output databaseName string = deployNew ? sqlDatabase!.name : existingSqlDatabase!.name
+output containerName string = deployNew ? visionarylabContainer!.name : existingVisionarylabContainer!.name
+output systemAssignedIdentityPrincipalId string = deployNew ? cosmosAccount!.identity.principalId : existingCosmosAccount!.identity.principalId
+output dataReaderRoleId string = deployNew ? dataReaderRole!.id : existingDataReaderRole!.id
+output dataContributorRoleId string = deployNew ? dataContributorRole!.id : existingDataContributorRole!.id

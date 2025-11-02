@@ -13,7 +13,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = if(depl
   }
   kind: 'StorageV2'
   properties: {
-    allowBlobPublicAccess: true
+    allowBlobPublicAccess: false
     allowSharedKeyAccess: false
     publicNetworkAccess: publicNetworkAccess
     minimumTlsVersion: 'TLS1_2'
@@ -24,7 +24,12 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = if(depl
   }
 }
 
-output storageAccountPrimaryEndpoint string = deployNew ? storageAccount.properties.primaryEndpoints.blob : ''
-output storageAccountId string = deployNew ? storageAccount.id : ''
+// Reference to existing storage account when not deploying new
+resource existingStorageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' existing = if(!deployNew) {
+  name: storageAccountName
+}
+
+output storageAccountPrimaryEndpoint string = deployNew ? storageAccount!.properties.primaryEndpoints.blob : existingStorageAccount!.properties.primaryEndpoints.blob
+output storageAccountId string = deployNew ? storageAccount!.id : existingStorageAccount!.id
 output storageAccountName string = storageAccountName
 

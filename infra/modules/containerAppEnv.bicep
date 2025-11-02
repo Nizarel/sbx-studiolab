@@ -45,5 +45,10 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-05-01' = if(dep
   }
 }
 
-output containerAppEnvId string = containerAppEnv.id
-output containerAppDefaultDomain string = containerAppEnv.properties.defaultDomain
+// Reference to existing Container App Environment when not deploying new
+resource existingContainerAppEnv 'Microsoft.App/managedEnvironments@2023-05-01' existing = if(!deployNew) {
+  name: containerAppEnvName
+}
+
+output containerAppEnvId string = deployNew ? containerAppEnv!.id : existingContainerAppEnv!.id
+output containerAppDefaultDomain string = deployNew ? containerAppEnv!.properties.defaultDomain : existingContainerAppEnv!.properties.defaultDomain

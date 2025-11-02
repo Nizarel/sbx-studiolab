@@ -42,19 +42,19 @@
       "value": "${SORA_DEPLOYMENT}"
     },
     "enablePrivateEndpoints": {
-      "value": false
+      "value": true
     },
     "deploySecondEnvironment": {
-      "value": false
+      "value": true
     },
     "deployNewVNet": {
-      "value": true
+      "value": false
     },
     "deployNewDnsZones": {
-      "value": true
+      "value": false
     },
     "deployNewPrivateEndpoints": {
-      "value": true
+      "value": false
     }
   }
 }
