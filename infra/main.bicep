@@ -501,6 +501,10 @@ module storageRoleAssignmentMod './modules/storageRoleAssignment.bicep' = {
     storageAccountName: storageAccountName
     containerAppPrincipalId: containerAppBackend.outputs.containerAppPrincipalId
   }
+  dependsOn: [
+    containerAppBackend
+    storageAccountMod
+  ]
 }
 
 // Outputs for azd
