@@ -2113,3 +2113,143 @@ export async function generateVideoTitle(prompt: string): Promise<string> {
   return data.title || prompt.substring(0, 50) + (prompt.length > 50 ? '...' : '');
 }
 
+// Social Media Publishing Types and Functions
+
+export enum SocialMediaPlatform {
+  YOUTUBE = "youtube",
+  TIKTOK = "tiktok",
+  FACEBOOK = "facebook",
+}
+
+export enum VideoPrivacyStatus {
+  PUBLIC = "public",
+  PRIVATE = "private",
+  UNLISTED = "unlisted",
+}
+
+export interface YouTubePublishRequest {
+  video_blob_name: string;
+  title: string;
+  description?: string;
+  tags?: string[];
+  category_id?: string;
+  privacy_status: VideoPrivacyStatus;
+  made_for_kids: boolean;
+}
+
+export interface PublishResponse {
+  success: boolean;
+  platform: SocialMediaPlatform;
+  video_id?: string;
+  video_url?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface SocialMediaHealth {
+  youtube: {
+    configured: boolean;
+    status: string;
+  };
+  tiktok: {
+    configured: boolean;
+    status: string;
+  };
+  facebook: {
+    configured: boolean;
+    status: string;
+  };
+}
+
+/**
+ * Check social media service health and configuration status
+ */
+export async function getSocialMediaHealth(): Promise<SocialMediaHealth> {
+  const url = `${API_BASE_URL}/social-media/health`;
+  
+  if (API_DEBUG) {
+    console.log(`Checking social media health`);
+    console.log(`GET ${url}`);
+  }
+
+  const response = await fetch(url);
+
+  if (API_DEBUG) {
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to check social media health: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Publish a video to YouTube
+ */
+export async function publishToYouTube(request: YouTubePublishRequest): Promise<PublishResponse> {
+  const url = `${API_BASE_URL}/social-media/youtube`;
+  
+  if (API_DEBUG) {
+    console.log(`Publishing video to YouTube: ${request.title}`);
+    console.log(`POST ${url}`);
+    console.log('Request:', request);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (API_DEBUG) {
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      console.error('Error response:', await response.text().catch(() => 'Could not read response text'));
+    }
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to publish to YouTube: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get YouTube video status and analytics
+ */
+export async function getYouTubeVideoStatus(videoId: string): Promise<{
+  video_id: string;
+  title: string;
+  description: string;
+  privacy_status: string;
+  views: number;
+  likes: number;
+  comments: number;
+  url: string;
+}> {
+  const url = `${API_BASE_URL}/social-media/youtube/status/${videoId}`;
+  
+  if (API_DEBUG) {
+    console.log(`Getting YouTube video status for ${videoId}`);
+    console.log(`GET ${url}`);
+  }
+
+  const response = await fetch(url);
+
+  if (API_DEBUG) {
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to get video status: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { cn } from "@/utils/utils";
-import { PlayCircle, MoreVertical, Trash, FolderUp, Download, Loader2, Wand2 } from "lucide-react";
+import { PlayCircle, MoreVertical, Trash, FolderUp, Download, Loader2, Wand2, Youtube } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { VideoRemixDialog } from "@/components/VideoRemixDialog";
+import { YouTubePublishDialog } from "@/components/YouTubePublishDialog";
 
 interface VideoCardProps {
   src: string;
@@ -42,6 +43,7 @@ interface VideoCardProps {
 
 export function VideoCard({
   src,
+  title,
   description,
   aspectRatio = "16:9",
   className,
@@ -72,6 +74,7 @@ export function VideoCard({
   const [folders, setFolders] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [remixDialogOpen, setRemixDialogOpen] = useState(false);
+  const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
 
   // Debounced play function to prevent rapid play/pause calls
   const debouncedPlay = () => {
@@ -454,6 +457,17 @@ export function VideoCard({
         />
       )}
       
+      {/* YouTube Publish Dialog */}
+      {blobName && (
+        <YouTubePublishDialog
+          open={youtubeDialogOpen}
+          onOpenChange={setYoutubeDialogOpen}
+          videoBlobName={blobName}
+          videoTitle={title}
+          videoPrompt={prompt}
+        />
+      )}
+      
       <div 
         ref={cardRef}
         className="relative w-full mb-0"
@@ -482,6 +496,19 @@ export function VideoCard({
                   }}>
                     <Wand2 className="h-4 w-4 mr-2" />
                     Remix video
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              
+              {blobName && (
+                <>
+                  <DropdownMenuItem onClick={(e) => {
+                    e.stopPropagation();
+                    setYoutubeDialogOpen(true);
+                  }}>
+                    <Youtube className="h-4 w-4 mr-2" />
+                    Publish to YouTube
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>
