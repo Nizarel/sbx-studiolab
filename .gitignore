@@ -182,6 +182,10 @@ videos
 notebooks/video-generations/
 frontend/lighthouse-report.html
 
+# YouTube OAuth credentials - DO NOT COMMIT
+client_secrets.json
+youtube_credentials.json
+
 # Bicep compiled templates (ARM JSON)
 infra/main.json
 infra/**/*.json
