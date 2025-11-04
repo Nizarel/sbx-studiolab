@@ -161,7 +161,7 @@ class YouTubeService:
                 'snippet': {
                     'title': title[:100],  # YouTube max title length
                     'description': description[:5000] if description else '',
-                    'tags': tags[:500] if tags else [],
+                    'tags': tags if tags else [],  # YouTube will validate tag limits
                     'categoryId': category_id
                 },
                 'status': {
@@ -274,7 +274,7 @@ class YouTubeService:
             if description is not None:
                 body['snippet']['description'] = description[:5000]
             if tags is not None:
-                body['snippet']['tags'] = tags[:500]
+                body['snippet']['tags'] = tags  # YouTube will validate tag limits
             
             # Update privacy if provided
             if privacy_status:

@@ -201,22 +201,24 @@ async def publish_to_platform(
         PublishResponse with platform-specific details
     """
     if request.platform == SocialMediaPlatform.YOUTUBE:
+        platform_opts = request.platform_specific_options or {}
         youtube_request = YouTubePublishRequest(
             video_blob_name=request.video_blob_name,
             title=request.title,
             description=request.description,
             tags=request.tags,
             privacy_status=request.privacy_status,
-            category_id=request.platform_specific_options.get('category_id', '22') if request.platform_specific_options else '22',
-            made_for_kids=request.platform_specific_options.get('made_for_kids', False) if request.platform_specific_options else False
+            category_id=platform_opts.get('category_id', '22'),
+            made_for_kids=platform_opts.get('made_for_kids', False)
         )
         return await publish_to_youtube(youtube_request, youtube_service)
     
     elif request.platform == SocialMediaPlatform.TIKTOK:
+        platform_opts = request.platform_specific_options or {}
         tiktok_request = TikTokPublishRequest(
             video_blob_name=request.video_blob_name,
             title=request.title,
-            privacy_level=request.platform_specific_options.get('privacy_level', 'SELF_ONLY') if request.platform_specific_options else 'SELF_ONLY'
+            privacy_level=platform_opts.get('privacy_level', 'SELF_ONLY')
         )
         return await publish_to_tiktok(tiktok_request)
     
