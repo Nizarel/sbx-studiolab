@@ -5,7 +5,7 @@ import os
 import logging
 import uvicorn
 from .core.config import settings
-from .api.endpoints import images, metadata_router, videos, gallery, env
+from .api.endpoints import images, metadata_router, videos, gallery, env, social_media
 
 # Configure logging to suppress Azure Blob Storage verbose logs
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(
@@ -47,6 +47,9 @@ app.include_router(
     metadata_router.router, prefix=f"{settings.API_V1_STR}/metadata", tags=["metadata"]
 )
 app.include_router(env.router, prefix=f"{settings.API_V1_STR}", tags=["env"])
+app.include_router(
+    social_media.router, prefix=f"{settings.API_V1_STR}/social-media", tags=["social-media"]
+)
 # app.include_router(organizer.router, prefix=f"{settings.API_V1_STR}/organizer", tags=["organizer"])
 # app.include_router(sora.router, prefix=f"{settings.API_V1_STR}/sora", tags=["sora"])
 

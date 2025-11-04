@@ -10,6 +10,7 @@
 - Analyze outputs with AI for quality control, metadata tagging, and asset optimization
 - Provide guardrails for content showing brands products (brand protection)
 - Manage your content in an organized asset library
+- **NEW**: Publish generated videos directly to YouTube (TikTok and Facebook coming soon)
 
 <img src="ui-sample.png" alt="description" width="800"/>
 
@@ -258,3 +259,14 @@ This creates:
 - Reuses existing VNet, DNS zones, Storage, and Cosmos DB
 
 📖 See the [Second Environment Deployment Guide](DEPLOYMENT_SECOND_ENVIRONMENT.md) for detailed instructions
+
+## Social Media Publishing
+
+Publish your generated videos directly to social media platforms:
+
+- **YouTube**: Full integration with OAuth 2.0 authentication
+- **TikTok**: Coming soon
+- **Facebook**: Coming soon
+
+For setup instructions and usage examples, see [Social Media Publishing Guide](SOCIAL_MEDIA_PUBLISHING.md)
+
