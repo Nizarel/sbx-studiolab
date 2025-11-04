@@ -120,7 +120,8 @@ class TestSocialMediaModels:
         assert response.success is True
         assert response.platform == SocialMediaPlatform.YOUTUBE
         assert response.video_id == "abc123"
-        assert "youtube.com" in response.video_url
+        # Test assertion only: check URL contains expected domain
+        assert "youtube.com" in response.video_url  # nosec: test assertion, not URL validation
         assert response.message == "Upload successful"
     
     def test_privacy_status_enum(self):
